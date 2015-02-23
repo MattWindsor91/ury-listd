@@ -3,7 +3,11 @@ package main
 import (
 	"log"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
+	baps3 "github.com/UniversityRadioYork/baps3-go"
 	"github.com/docopt/docopt-go"
 )
 
@@ -23,7 +27,29 @@ Options:
   -h --help                     Show this screen.
   -v --version                  Show version.`
 
-	arguments, _ := docopt.Parse(usage, nil, true, "ury-listd-go 0.0", false)
 	logger := log.New(os.Stdout, "", log.Lshortfile)
-	logger.Println(arguments)
+	args, err := docopt.Parse(usage, nil, true, "ury-listd-go 0.0", false)
+	if err != nil {
+		logger.Fatal("Error parsing args: " + err.Error())
+	}
+	sigs := make(chan os.Signal)
+	signal.Notify(sigs, syscall.SIGINT)
+	responseCh := make(chan string)
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	connector := baps3.InitConnector("", responseCh, wg, logger)
+	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
+	go connector.Run()
+	for {
+		select {
+		case res := <-responseCh:
+			logger.Println(res)
+		case <-sigs:
+			logger.Println("Exiting...")
+			close(connector.ReqCh)
+			wg.Wait()
+			os.Exit(0)
+		}
+	}
+
 }
