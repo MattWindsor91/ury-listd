@@ -11,7 +11,7 @@ import (
 	"github.com/docopt/docopt-go"
 )
 
-func main() {
+func parseArgs() (args map[string]interface{}, err error) {
 	usage := `ury-listd-go.
 
 Usage:
@@ -27,19 +27,36 @@ Options:
   -h --help                     Show this screen.
   -v --version                  Show version.`
 
+	return docopt.Parse(usage, nil, true, "ury-listd-go 0.0", false)
+}
+
+func main() {
 	logger := log.New(os.Stdout, "", log.Lshortfile)
-	args, err := docopt.Parse(usage, nil, true, "ury-listd-go 0.0", false)
+	args, err := parseArgs()
 	if err != nil {
 		logger.Fatal("Error parsing args: " + err.Error())
 	}
+
+	// Set up server listener
+	serverCh := make(chan string)
+	server, err := MakeServer(args["--addr"].(string), args["--port"].(string), serverCh)
+	if err != nil || server == nil {
+		logger.Fatal("Error initialising connection server: " + err.Error())
+	}
+	go server.run()
+
+	// Set up connection to playout
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT)
+
 	responseCh := make(chan string)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	connector := baps3.InitConnector("", responseCh, wg, logger)
 	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
 	go connector.Run()
+
+	// Main loop
 	for {
 		select {
 		case res := <-responseCh:
@@ -51,5 +68,4 @@ Options:
 			os.Exit(0)
 		}
 	}
-
 }
