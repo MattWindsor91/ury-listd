@@ -49,7 +49,7 @@ func main() {
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT)
 
-	responseCh := make(chan string)
+	responseCh := make(chan baps3.Message)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	connector := baps3.InitConnector("", responseCh, wg, logger)
@@ -60,7 +60,7 @@ func main() {
 	for {
 		select {
 		case res := <-responseCh:
-			logger.Println(res)
+			logger.Println(res.String())
 		case <-sigs:
 			logger.Println("Exiting...")
 			close(connector.ReqCh)
