@@ -12,7 +12,7 @@ type Client struct {
 	reader   *bufio.Reader
 	writer   *bufio.Writer
 	serverCh chan []byte
-	Outgoing chan string
+	Outgoing chan []byte
 }
 
 func MakeClient(conn net.Conn, clientCh chan []byte) *Client {
@@ -21,13 +21,13 @@ func MakeClient(conn net.Conn, clientCh chan []byte) *Client {
 		reader:   bufio.NewReader(conn),
 		writer:   bufio.NewWriter(conn),
 		serverCh: clientCh,
-		Outgoing: make(chan string),
+		Outgoing: make(chan []byte),
 	}
 
 	go client.Read()
 	go client.write()
 
-	client.Outgoing <- "Hello!\n" // XXX Actual welcome message
+	client.Outgoing <- []byte("Hello!\n") // XXX Actual welcome message
 
 	return client
 }
@@ -45,7 +45,10 @@ func (c *Client) Read() {
 
 func (c *Client) write() {
 	for data := range c.Outgoing {
-		c.writer.WriteString(data)
+		_, err := c.writer.Write(data)
+		if err != nil {
+			continue // TODO Handle
+		}
 		c.writer.Flush()
 	}
 }
@@ -75,7 +78,11 @@ func MakeServer(addr string, port string, serverCh chan baps3.Message) (*Server,
 func (s *Server) Broadcast(msg baps3.Message) {
 	// Probably should have \n at the end
 	for _, c := range s.clients {
-		c.Outgoing <- msg.String()
+		data, err := msg.Pack()
+		if err != nil {
+			continue // TODO Handle
+		}
+		c.Outgoing <- data
 	}
 }
 
@@ -85,7 +92,6 @@ func (s *Server) ReceiveLoop() {
 		if err != nil {
 			continue // TODO: Do something?
 		}
-		println("hmm, a client spoke!")
 	}
 }
 
