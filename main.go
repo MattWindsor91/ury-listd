@@ -40,7 +40,7 @@ func main() {
 	// Set up server listener
 	serverCh := make(chan string)
 	server, err := MakeServer(args["--addr"].(string), args["--port"].(string), serverCh)
-	if err != nil || server == nil {
+	if err != nil {
 		logger.Fatal("Error initialising connection server: " + err.Error())
 	}
 	go server.run()
