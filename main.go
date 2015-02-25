@@ -38,7 +38,7 @@ func main() {
 	}
 
 	// Set up server listener
-	serverCh := make(chan string)
+	serverCh := make(chan baps3.Message)
 	server, err := MakeServer(args["--addr"].(string), args["--port"].(string), serverCh)
 	if err != nil {
 		logger.Fatal("Error initialising connection server: " + err.Error())
