@@ -31,17 +31,17 @@ Options:
 }
 
 func main() {
-	logger := log.New(os.Stdout, "", log.Lshortfile)
+	log.SetFlags(log.Lshortfile) // Set up default logger
 	args, err := parseArgs()
 	if err != nil {
-		logger.Fatal("Error parsing args: " + err.Error())
+		log.Fatal("Error parsing args: " + err.Error())
 	}
 
 	// Set up server listener
 	serverCh := make(chan baps3.Message)
 	server, err := MakeServer(args["--addr"].(string), args["--port"].(string), serverCh)
 	if err != nil {
-		logger.Fatal("Error initialising connection server: " + err.Error())
+		log.Fatal("Error initialising connection server: " + err.Error())
 	}
 	go server.run()
 
@@ -52,17 +52,20 @@ func main() {
 	responseCh := make(chan baps3.Message)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
-	connector := baps3.InitConnector("", responseCh, wg, logger)
+	connLog := log.New(os.Stderr, "playd: ", 0)
+	connector := baps3.InitConnector("", responseCh, wg, connLog)
 	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
 	go connector.Run()
 
-	// Main loop
+	// Main connector loop
 	for {
 		select {
 		case res := <-responseCh:
-			logger.Println(res.String())
+			// Pass stuff through to server
+			connLog.Println(res.String())
+			server.ProcessCommand(res)
 		case <-sigs:
-			logger.Println("Exiting...")
+			log.Println("Exiting...")
 			close(connector.ReqCh)
 			wg.Wait()
 			os.Exit(0)
