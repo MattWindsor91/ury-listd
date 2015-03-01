@@ -42,18 +42,34 @@ func (s *Server) Broadcast(msg baps3.Message) {
 
 func (s *Server) ReceiveLoop() {
 	for data := range s.clientComm {
-		_, _, err := s.tok.Tokenise(data)
+		lines, _, err := s.tok.Tokenise(data)
 		if err != nil {
+			log.Println(err)
 			continue // TODO: Do something?
 		}
+		for _, line := range lines {
+			msg, err := baps3.LineToMessage(line)
+			if err != nil {
+				log.Println(err)
+				continue // TODO: Do something?
+			}
+			// TODO: Something with particular types of msgs
+			s.serverCh <- *msg
+		}
 	}
+}
+
+func (s *Server) ProcessCommand(msg baps3.Message) {
+	s.Broadcast(msg)
 }
 
 func (s *Server) run() {
 	go s.ReceiveLoop()
 	for {
 		conn, err := s.listener.Accept()
+		log.Println("Opening connection from " + conn.RemoteAddr().String())
 		if err != nil {
+			log.Println("Error accepting connection: " + err.Error())
 			continue
 		}
 		client := MakeClient(conn, s.clientComm)

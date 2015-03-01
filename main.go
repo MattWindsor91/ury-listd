@@ -37,14 +37,6 @@ func main() {
 		log.Fatal("Error parsing args: " + err.Error())
 	}
 
-	// Set up server listener
-	serverCh := make(chan baps3.Message)
-	server, err := MakeServer(args["--addr"].(string), args["--port"].(string), serverCh)
-	if err != nil {
-		log.Fatal("Error initialising connection server: " + err.Error())
-	}
-	go server.run()
-
 	// Set up connection to playout
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT)
@@ -56,6 +48,13 @@ func main() {
 	connector := baps3.InitConnector("", responseCh, wg, connLog)
 	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
 	go connector.Run()
+
+	// Set up server listener (requires connector.ReqCh)
+	server, err := MakeServer(args["--addr"].(string), args["--port"].(string), connector.ReqCh)
+	if err != nil {
+		log.Fatal("Error initialising connection server: " + err.Error())
+	}
+	go server.run()
 
 	// Main connector loop
 	for {
