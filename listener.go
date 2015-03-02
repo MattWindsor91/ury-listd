@@ -31,11 +31,11 @@ func MakeListener(addr string, port string, reqCh chan baps3.Message) (*Listener
 
 func (l *Listener) Broadcast(msg baps3.Message) {
 	// Probably should have \n at the end
+	data, err := msg.Pack()
+	if err != nil {
+		return // TODO Handle
+	}
 	for _, c := range l.clients {
-		data, err := msg.Pack()
-		if err != nil {
-			continue // TODO Handle
-		}
 		c.Outgoing <- data
 	}
 }
