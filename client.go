@@ -37,12 +37,19 @@ func MakeWelcomeMsg() *baps3.Message {
 }
 
 func (c *Client) Close() {
+	close(c.responseCh)
+	close(c.Outgoing)
 	c.conn.Close()
 }
 
 func (c *Client) Read() {
 	for {
-		data, _ := c.reader.ReadBytes('\n')
+		data, err := c.reader.ReadBytes('\n')
+		if err != nil {
+			// Connection disappeared, probably
+			c.Close()
+			return
+		}
 		c.responseCh <- data // Each client doesn't care what it got, that's for the server to handle
 	}
 }
