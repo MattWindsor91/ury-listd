@@ -10,7 +10,6 @@ import (
 type Client struct {
 	conn       net.Conn
 	reader     *bufio.Reader
-	writer     *bufio.Writer
 	responseCh chan []byte
 	Outgoing   chan []byte
 }
@@ -19,7 +18,6 @@ func MakeClient(conn net.Conn, respCh chan []byte) *Client {
 	client := &Client{
 		conn:       conn,
 		reader:     bufio.NewReader(conn),
-		writer:     bufio.NewWriter(conn),
 		responseCh: respCh,
 		Outgoing:   make(chan []byte),
 	}
@@ -51,10 +49,9 @@ func (c *Client) Read() {
 
 func (c *Client) write() {
 	for data := range c.Outgoing {
-		_, err := c.writer.Write(data)
+		_, err := c.conn.Write(data)
 		if err != nil {
 			continue // TODO Handle
 		}
-		c.writer.Flush()
 	}
 }
