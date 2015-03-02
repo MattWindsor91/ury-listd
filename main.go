@@ -50,11 +50,11 @@ func main() {
 	go connector.Run()
 
 	// Set up server listener (requires connector.ReqCh)
-	server, err := MakeServer(args["--addr"].(string), args["--port"].(string), connector.ReqCh)
+	listener, err := MakeListener(args["--addr"].(string), args["--port"].(string), connector.ReqCh)
 	if err != nil {
 		log.Fatal("Error initialising connection server: " + err.Error())
 	}
-	go server.run()
+	go listener.run()
 
 	// Main connector loop
 	for {
@@ -62,7 +62,7 @@ func main() {
 		case res := <-responseCh:
 			// Pass stuff through to server
 			connLog.Println(res.String())
-			server.ProcessCommand(res)
+			listener.ProcessCommand(res)
 		case <-sigs:
 			log.Println("Exiting...")
 			close(connector.ReqCh)
