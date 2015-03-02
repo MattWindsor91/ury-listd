@@ -8,23 +8,23 @@ import (
 )
 
 type Listener struct {
-	listener    net.Listener
-	connectorCh chan baps3.Message
-	clientComm  chan []byte
-	tok         *baps3.Tokeniser
-	clients     []*Client
+	listener   net.Listener
+	requestCh  chan baps3.Message
+	responseCh chan []byte
+	tok        *baps3.Tokeniser
+	clients    []*Client
 }
 
-func MakeListener(addr string, port string, connectorCh chan baps3.Message) (*Listener, error) {
+func MakeListener(addr string, port string, reqCh chan baps3.Message) (*Listener, error) {
 	netListener, err := net.Listen("tcp", addr+":"+port)
 	if err != nil {
 		return nil, err
 	}
 	listener := &Listener{
-		listener:    netListener,
-		tok:         baps3.NewTokeniser(),
-		clientComm:  make(chan []byte),
-		connectorCh: connectorCh,
+		listener:   netListener,
+		tok:        baps3.NewTokeniser(),
+		responseCh: make(chan []byte),
+		requestCh:  reqCh,
 	}
 	return listener, nil
 }
@@ -41,7 +41,7 @@ func (l *Listener) Broadcast(msg baps3.Message) {
 }
 
 func (l *Listener) ReceiveLoop() {
-	for data := range l.clientComm {
+	for data := range l.responseCh {
 		lines, _, err := l.tok.Tokenise(data)
 		if err != nil {
 			log.Println(err)
@@ -54,7 +54,7 @@ func (l *Listener) ReceiveLoop() {
 				continue // TODO: Do something?
 			}
 			// TODO: Something with particular types of msgs
-			l.connectorCh <- *msg
+			l.requestCh <- *msg
 		}
 	}
 }
@@ -72,7 +72,7 @@ func (l *Listener) run() {
 			log.Println("Error accepting connection: " + err.Error())
 			continue
 		}
-		client := MakeClient(conn, l.clientComm)
+		client := MakeClient(conn, l.responseCh)
 		l.clients = append(l.clients, client)
 	}
 }

@@ -11,16 +11,16 @@ type Client struct {
 	conn       net.Conn
 	reader     *bufio.Reader
 	writer     *bufio.Writer
-	listenerCh chan []byte
+	responseCh chan []byte
 	Outgoing   chan []byte
 }
 
-func MakeClient(conn net.Conn, clientCh chan []byte) *Client {
+func MakeClient(conn net.Conn, respCh chan []byte) *Client {
 	client := &Client{
 		conn:       conn,
 		reader:     bufio.NewReader(conn),
 		writer:     bufio.NewWriter(conn),
-		listenerCh: clientCh,
+		responseCh: respCh,
 		Outgoing:   make(chan []byte),
 	}
 
@@ -45,7 +45,7 @@ func (c *Client) Close() {
 func (c *Client) Read() {
 	for {
 		data, _ := c.reader.ReadBytes('\n')
-		c.listenerCh <- data // Each client doesn't care what it got, that's for the server to handle
+		c.responseCh <- data // Each client doesn't care what it got, that's for the server to handle
 	}
 }
 

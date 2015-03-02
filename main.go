@@ -49,10 +49,10 @@ func main() {
 	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
 	go connector.Run()
 
-	// Set up server listener (requires connector.ReqCh)
+	// Set up listener (requires connector.ReqCh)
 	listener, err := MakeListener(args["--addr"].(string), args["--port"].(string), connector.ReqCh)
 	if err != nil {
-		log.Fatal("Error initialising connection server: " + err.Error())
+		log.Fatal("Error initialising connection listener: " + err.Error())
 	}
 	go listener.run()
 
