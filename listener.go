@@ -76,21 +76,21 @@ func (c *Client) Write(ch <-chan baps3.Message, rmCh chan<- *Client) {
 	}
 }
 
-func MakeWelcomeMsg() *baps3.Message {
+func makeWelcomeMsg() *baps3.Message {
 	return baps3.NewMessage(baps3.RsOhai).AddArg("listd").AddArg("0.0")
 }
 
-func MakeFeaturesMsg() *baps3.Message {
+func makeFeaturesMsg() *baps3.Message {
 	return baps3.NewMessage(baps3.RsFeatures).AddArg("lol")
 }
 
-func ProcessRequest(connectorReqCh chan<- baps3.Message, req baps3.Message) {
+func processRequest(connectorReqCh chan<- baps3.Message, req baps3.Message) {
 	// TODO: Do something else
 	log.Println("New request:", req.String())
 	connectorReqCh <- req
 }
 
-func ProcessResponse(clients *map[net.Conn]chan<- baps3.Message, res baps3.Message) {
+func processResponse(clients *map[net.Conn]chan<- baps3.Message, res baps3.Message) {
 	// TODO: Do something else
 	log.Println("New response:", res.String())
 	for _, ch := range *clients {
@@ -105,13 +105,13 @@ func handleChannels(reqCh <-chan baps3.Message, cReqCh chan<- baps3.Message, cRe
 	for {
 		select {
 		case msg := <-cResCh:
-			ProcessResponse(&clients, msg)
+			processResponse(&clients, msg)
 		case msg := <-reqCh:
-			ProcessRequest(cReqCh, msg)
+			processRequest(cReqCh, msg)
 		case client := <-addCh:
 			clients[client.conn] = client.resCh
-			client.resCh <- *MakeWelcomeMsg()
-			client.resCh <- *MakeFeaturesMsg()
+			client.resCh <- *makeWelcomeMsg()
+			client.resCh <- *makeFeaturesMsg()
 			log.Println("New connection from", client.conn.RemoteAddr())
 		case client := <-rmCh:
 			close(client.resCh)
