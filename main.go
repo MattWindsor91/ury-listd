@@ -49,20 +49,11 @@ func main() {
 	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
 	go connector.Run()
 
-	// Set up listener (requires connector.ReqCh)
-	listener, err := MakeListener(args["--addr"].(string), args["--port"].(string), connector.ReqCh)
-	if err != nil {
-		log.Fatal("Error initialising connection listener: " + err.Error())
-	}
-	go listener.run()
+	go runListener(args["--addr"].(string), args["--port"].(string), connector.ReqCh, responseCh)
 
-	// Main connector loop
+	// Signal handler loop
 	for {
 		select {
-		case res := <-responseCh:
-			// Pass stuff through to server
-			connLog.Println(res.String())
-			listener.ProcessCommand(res)
 		case <-sigs:
 			log.Println("Exiting...")
 			close(connector.ReqCh)
