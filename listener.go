@@ -8,12 +8,18 @@ import (
 	baps3 "github.com/UniversityRadioYork/baps3-go"
 )
 
+// Wrapper structure for a client connection. The actual connection is stored in conn,
+// resCh is a channel that responses get sent down and tok is the tokeniser for
+// converting newly received data into baps3.Messages.
 type Client struct {
 	conn  net.Conn
 	resCh chan baps3.Message
 	tok   *baps3.Tokeniser
 }
 
+// Handles a new client connection.
+// reqCh is the channel that receives the new requests from the connection and
+// addCh & rmCh are for (un)registering the channel with the main client list.
 func handleNewConnection(conn net.Conn, reqCh chan<- baps3.Message, addCh chan<- *Client, rmCh chan<- *Client) {
 	defer conn.Close()
 	client := &Client{
@@ -29,6 +35,8 @@ func handleNewConnection(conn net.Conn, reqCh chan<- baps3.Message, addCh chan<-
 	client.Write(client.resCh, rmCh)
 }
 
+// Reads data from a client connection. All received request messages get sent down reqCh.
+// Bails if reading bytes causes an error, which gets the connection unregistered and disconnected.
 func (c *Client) Read(reqCh chan<- baps3.Message, rmCh chan<- *Client) {
 	reader := bufio.NewReader(c.conn)
 	for {
@@ -55,9 +63,12 @@ func (c *Client) Read(reqCh chan<- baps3.Message, rmCh chan<- *Client) {
 	}
 }
 
-func (c *Client) Write(ch <-chan baps3.Message, rmCh chan<- *Client) {
+// Writes new responses to the client connection.
+// New responses are got from resCh. Errors in writing the data
+// will cause the connection to be disconnected, via rmCh.
+func (c *Client) Write(resCh <-chan baps3.Message, rmCh chan<- *Client) {
 	for {
-		msg, more := <-ch
+		msg, more := <-resCh
 		// Channel's been closed
 		if !more {
 			return
@@ -84,12 +95,15 @@ func makeFeaturesMsg() *baps3.Message {
 	return baps3.NewMessage(baps3.RsFeatures).AddArg("lol")
 }
 
-func processRequest(connectorReqCh chan<- baps3.Message, req baps3.Message) {
+// Handles a request from a client.
+// Falls through to the connector cReqCh if command is "not understood".
+func processRequest(cReqCh chan<- baps3.Message, req baps3.Message) {
 	// TODO: Do something else
 	log.Println("New request:", req.String())
-	connectorReqCh <- req
+	cReqCh <- req
 }
 
+// Broadcasts a response (res) to all connected clients.
 func processResponse(clients *map[net.Conn]chan<- baps3.Message, res baps3.Message) {
 	// TODO: Do something else
 	log.Println("New response:", res.String())
@@ -98,6 +112,11 @@ func processResponse(clients *map[net.Conn]chan<- baps3.Message, res baps3.Messa
 	}
 }
 
+// Main handler for client connection channels.
+// reqCh is the channel that new requests from clients come through.
+// cReqCh & cResCh are channels from the connector - cReqCh getting the "unused" requests
+// and cResCh being polled for responses from the connector.
+// addCh & rmCh are handlers for adding/removing connections.
 func handleChannels(reqCh <-chan baps3.Message, cReqCh chan<- baps3.Message, cResCh <-chan baps3.Message, addCh <-chan *Client, rmCh <-chan *Client) {
 
 	clients := make(map[net.Conn]chan<- baps3.Message)
@@ -121,6 +140,8 @@ func handleChannels(reqCh <-chan baps3.Message, cReqCh chan<- baps3.Message, cRe
 	}
 }
 
+// Listens for new connections on addr:port and spins up the relevant goroutines.
+// cReqCh & cResCh are from the connector, requests get pushed down and responses get pulled, respectively.
 func runListener(addr string, port string, cReqCh chan<- baps3.Message, cResCh <-chan baps3.Message) {
 	netListener, err := net.Listen("tcp", addr+":"+port)
 	if err != nil {
