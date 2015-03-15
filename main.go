@@ -49,7 +49,9 @@ func main() {
 	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
 	go connector.Run()
 
-	go runListener(args["--addr"].(string), args["--port"].(string), connector.ReqCh, responseCh)
+	h.setConnector(connector.ReqCh, responseCh)
+
+	go h.runListener(args["--addr"].(string), args["--port"].(string))
 
 	// Signal handler loop
 	for {

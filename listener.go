@@ -7,10 +7,36 @@ import (
 	baps3 "github.com/UniversityRadioYork/baps3-go"
 )
 
+// Maintains communications with the connector and connected clients.
+// Also does any processing needed with the commands.
+type hub struct {
+	// All current connections, and their outbound channel.
+	clients map[net.Conn]chan<- baps3.Message
+
+	// For communication with the connector.
+	cReqCh chan<- baps3.Message
+	cResCh <-chan baps3.Message
+
+	// Where new requests from clients come through.
+	reqCh chan baps3.Message
+
+	// Handlers for adding/removing connections.
+	addCh chan *Client
+	rmCh  chan *Client
+}
+
+var h = hub{
+	clients: make(map[net.Conn]chan<- baps3.Message),
+
+	reqCh: make(chan baps3.Message),
+
+	addCh: make(chan *Client),
+	rmCh:  make(chan *Client),
+}
+
 // Handles a new client connection.
-// reqCh is the channel that receives the new requests from the connection and
-// addCh & rmCh are for (un)registering the channel with the main client list.
-func handleNewConnection(conn net.Conn, reqCh chan<- baps3.Message, addCh chan<- *Client, rmCh chan<- *Client) {
+// conn is the new connection object.
+func (h *hub) handleNewConnection(conn net.Conn) {
 	defer conn.Close()
 	client := &Client{
 		conn:  conn,
@@ -19,10 +45,10 @@ func handleNewConnection(conn net.Conn, reqCh chan<- baps3.Message, addCh chan<-
 	}
 
 	// Register user
-	addCh <- client
+	h.addCh <- client
 
-	go client.Read(reqCh, rmCh)
-	client.Write(client.resCh, rmCh)
+	go client.Read(h.reqCh, h.rmCh)
+	client.Write(client.resCh, h.rmCh)
 }
 
 func makeWelcomeMsg() *baps3.Message {
@@ -35,63 +61,51 @@ func makeFeaturesMsg() *baps3.Message {
 
 // Handles a request from a client.
 // Falls through to the connector cReqCh if command is "not understood".
-func processRequest(cReqCh chan<- baps3.Message, req baps3.Message) {
+func (h *hub) processRequest(req baps3.Message) {
 	// TODO: Do something else
 	log.Println("New request:", req.String())
-	cReqCh <- req
+	h.cReqCh <- req
 }
 
 // Broadcasts a response (res) to all connected clients.
-func processResponse(clients *map[net.Conn]chan<- baps3.Message, res baps3.Message) {
+func (h *hub) processResponse(res baps3.Message) {
 	// TODO: Do something else
 	log.Println("New response:", res.String())
-	for _, ch := range *clients {
+	for _, ch := range h.clients {
 		ch <- res
 	}
 }
 
 // Main handler for client connection channels.
-// reqCh is the channel that new requests from clients come through.
-// cReqCh & cResCh are channels from the connector - cReqCh getting the "unused" requests
-// and cResCh being polled for responses from the connector.
-// addCh & rmCh are handlers for adding/removing connections.
-func handleChannels(reqCh <-chan baps3.Message, cReqCh chan<- baps3.Message, cResCh <-chan baps3.Message, addCh <-chan *Client, rmCh <-chan *Client) {
-
-	clients := make(map[net.Conn]chan<- baps3.Message)
-
+func (h *hub) handleChannels() {
 	for {
 		select {
-		case msg := <-cResCh:
-			processResponse(&clients, msg)
-		case msg := <-reqCh:
-			processRequest(cReqCh, msg)
-		case client := <-addCh:
-			clients[client.conn] = client.resCh
+		case msg := <-h.cResCh:
+			h.processResponse(msg)
+		case msg := <-h.reqCh:
+			h.processRequest(msg)
+		case client := <-h.addCh:
+			h.clients[client.conn] = client.resCh
 			client.resCh <- *makeWelcomeMsg()
 			client.resCh <- *makeFeaturesMsg()
 			log.Println("New connection from", client.conn.RemoteAddr())
-		case client := <-rmCh:
+		case client := <-h.rmCh:
 			close(client.resCh)
-			delete(clients, client.conn)
+			delete(h.clients, client.conn)
 			log.Println("Closed connection from", client.conn.RemoteAddr())
 		}
 	}
 }
 
 // Listens for new connections on addr:port and spins up the relevant goroutines.
-// cReqCh & cResCh are from the connector, requests get pushed down and responses get pulled, respectively.
-func runListener(addr string, port string, cReqCh chan<- baps3.Message, cResCh <-chan baps3.Message) {
+func (h *hub) runListener(addr string, port string) {
 	netListener, err := net.Listen("tcp", addr+":"+port)
 	if err != nil {
 		log.Println("Listening error:", err.Error())
 		return
 	}
 
-	reqCh := make(chan baps3.Message)
-	addCh := make(chan *Client)
-	remCh := make(chan *Client)
-
-	go handleChannels(reqCh, cReqCh, cResCh, addCh, remCh)
+	go h.handleChannels()
 
 	// Get new connections
 	for {
@@ -101,6 +115,12 @@ func runListener(addr string, port string, cReqCh chan<- baps3.Message, cResCh <
 			continue
 		}
 
-		go handleNewConnection(conn, reqCh, addCh, remCh)
+		go h.handleNewConnection(conn)
 	}
+}
+
+// Sets up the connector channels for the hub object.
+func (h *hub) setConnector(cReqCh chan<- baps3.Message, cResCh <-chan baps3.Message) {
+	h.cReqCh = cReqCh
+	h.cResCh = cResCh
 }
