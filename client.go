@@ -50,9 +50,9 @@ func (c *Client) Read(reqCh chan<- baps3.Message, rmCh chan<- *Client) {
 // will cause the connection to be disconnected, via rmCh.
 func (c *Client) Write(resCh <-chan baps3.Message, rmCh chan<- *Client) {
 	for {
-		msg, more := <-resCh
+		msg, ok := <-resCh
 		// Channel's been closed
-		if !more {
+		if !ok {
 			return
 		}
 		data, err := msg.Pack()
