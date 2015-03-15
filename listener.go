@@ -52,7 +52,7 @@ func (h *hub) handleNewConnection(conn net.Conn) {
 }
 
 func makeWelcomeMsg() *baps3.Message {
-	return baps3.NewMessage(baps3.RsOhai).AddArg("listd").AddArg("0.0")
+	return baps3.NewMessage(baps3.RsOhai).AddArg("listd-" + LD_VERSION)
 }
 
 func makeFeaturesMsg() *baps3.Message {

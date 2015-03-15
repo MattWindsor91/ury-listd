@@ -11,6 +11,8 @@ import (
 	"github.com/docopt/docopt-go"
 )
 
+var LD_VERSION string
+
 func parseArgs() (args map[string]interface{}, err error) {
 	usage := `ury-listd-go.
 
