@@ -76,8 +76,27 @@ func (h *hub) processResponse(res baps3.Message) {
 	}
 }
 
-// Main handler for client connection channels.
-func (h *hub) handleChannels() {
+// Listens for new connections on addr:port and spins up the relevant goroutines.
+func (h *hub) runListener(addr string, port string) {
+	netListener, err := net.Listen("tcp", addr+":"+port)
+	if err != nil {
+		log.Println("Listening error:", err.Error())
+		return
+	}
+
+	// Get new connections
+	go func() {
+		for {
+			conn, err := netListener.Accept()
+			if err != nil {
+				log.Println("Error accepting connection:", err.Error())
+				continue
+			}
+
+			go h.handleNewConnection(conn)
+		}
+	}()
+
 	for {
 		select {
 		case msg := <-h.cResCh:
@@ -94,28 +113,6 @@ func (h *hub) handleChannels() {
 			delete(h.clients, client.conn)
 			log.Println("Closed connection from", client.conn.RemoteAddr())
 		}
-	}
-}
-
-// Listens for new connections on addr:port and spins up the relevant goroutines.
-func (h *hub) runListener(addr string, port string) {
-	netListener, err := net.Listen("tcp", addr+":"+port)
-	if err != nil {
-		log.Println("Listening error:", err.Error())
-		return
-	}
-
-	go h.handleChannels()
-
-	// Get new connections
-	for {
-		conn, err := netListener.Accept()
-		if err != nil {
-			log.Println("Error accepting connection:", err.Error())
-			continue
-		}
-
-		go h.handleNewConnection(conn)
 	}
 }
 
