@@ -46,7 +46,7 @@ func main() {
 	responseCh := make(chan baps3.Message)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
-	connLog := log.New(os.Stderr, "playd: ", 0)
+	connLog := log.New(os.Stderr, "playd:", 0)
 	connector := baps3.InitConnector("", responseCh, wg, connLog)
 	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
 	go connector.Run()
@@ -60,6 +60,8 @@ func main() {
 		select {
 		case <-sigs:
 			log.Println("Exiting...")
+			h.Quit <- true
+			//<-h.Quit // Wait for quit to finish
 			close(connector.ReqCh)
 			wg.Wait()
 			os.Exit(0)

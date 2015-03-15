@@ -23,6 +23,7 @@ type hub struct {
 	// Handlers for adding/removing connections.
 	addCh chan *Client
 	rmCh  chan *Client
+	Quit  chan bool
 }
 
 var h = hub{
@@ -32,6 +33,7 @@ var h = hub{
 
 	addCh: make(chan *Client),
 	rmCh:  make(chan *Client),
+	Quit:  make(chan bool),
 }
 
 // Handles a new client connection.
@@ -112,6 +114,13 @@ func (h *hub) runListener(addr string, port string) {
 			close(client.resCh)
 			delete(h.clients, client.conn)
 			log.Println("Closed connection from", client.conn.RemoteAddr())
+		case <-h.Quit:
+			log.Println("Closing all connections")
+			for conn, ch := range h.clients {
+				close(ch)
+				delete(h.clients, conn)
+			}
+			//			h.Quit <- true
 		}
 	}
 }
