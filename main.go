@@ -11,7 +11,9 @@ import (
 	"github.com/docopt/docopt-go"
 )
 
-func main() {
+var LD_VERSION string
+
+func parseArgs() (args map[string]interface{}, err error) {
 	usage := `ury-listd-go.
 
 Usage:
@@ -27,29 +29,42 @@ Options:
   -h --help                     Show this screen.
   -v --version                  Show version.`
 
-	logger := log.New(os.Stdout, "", log.Lshortfile)
-	args, err := docopt.Parse(usage, nil, true, "ury-listd-go 0.0", false)
+	return docopt.Parse(usage, nil, true, "ury-listd-go 0.0", false)
+}
+
+func main() {
+	log.SetFlags(log.Lshortfile) // Set up default logger
+	args, err := parseArgs()
 	if err != nil {
-		logger.Fatal("Error parsing args: " + err.Error())
+		log.Fatal("Error parsing args: " + err.Error())
 	}
+
+	// Set up connection to playout
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT)
-	responseCh := make(chan string)
+
+	responseCh := make(chan baps3.Message)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
-	connector := baps3.InitConnector("", responseCh, wg, logger)
+	connLog := log.New(os.Stderr, "playd:", 0)
+	connector := baps3.InitConnector("", responseCh, wg, connLog)
 	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
 	go connector.Run()
+
+	h.setConnector(connector.ReqCh, responseCh)
+
+	go h.runListener(args["--addr"].(string), args["--port"].(string))
+
+	// Signal handler loop
 	for {
 		select {
-		case res := <-responseCh:
-			logger.Println(res)
 		case <-sigs:
-			logger.Println("Exiting...")
+			log.Println("Exiting...")
+			h.Quit <- true
+			//<-h.Quit // Wait for quit to finish
 			close(connector.ReqCh)
 			wg.Wait()
 			os.Exit(0)
 		}
 	}
-
 }
