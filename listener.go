@@ -13,6 +13,9 @@ type hub struct {
 	// All current clients.
 	clients map[*Client]bool
 
+	// Version string from the connector (playd)
+	cVersion string
+
 	// For communication with the connector.
 	cReqCh chan<- baps3.Message
 	cResCh <-chan baps3.Message
@@ -53,12 +56,14 @@ func (h *hub) handleNewConnection(conn net.Conn) {
 	client.Write(client.resCh, h.rmCh)
 }
 
+// Prepends the connector's version (from the OHAI) to the listd version.
 func makeWelcomeMsg() *baps3.Message {
-	return baps3.NewMessage(baps3.RsOhai).AddArg("listd-" + LD_VERSION)
+	return baps3.NewMessage(baps3.RsOhai).AddArg(h.cVersion + "/listd-" + LD_VERSION)
 }
 
 func makeFeaturesMsg() *baps3.Message {
-	return baps3.NewMessage(baps3.RsFeatures).AddArg("lol")
+	// TODO: Implement actual features
+	return baps3.NewMessage(baps3.RsFeatures)
 }
 
 // Handles a request from a client.
@@ -69,10 +74,20 @@ func (h *hub) processRequest(req baps3.Message) {
 	h.cReqCh <- req
 }
 
-// Broadcasts a response (res) to all connected clients.
+// Processes a response from the connector.
 func (h *hub) processResponse(res baps3.Message) {
 	// TODO: Do something else
 	log.Println("New response:", res.String())
+	switch res.Word() {
+	case baps3.RsOhai:
+		h.cVersion, _ = res.Arg(0)
+	default:
+		h.broadcast(res)
+	}
+}
+
+// Send a response message to all clients.
+func (h *hub) broadcast(res baps3.Message) {
 	for c, _ := range h.clients {
 		c.resCh <- res
 	}
