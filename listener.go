@@ -10,8 +10,8 @@ import (
 // Maintains communications with the connector and connected clients.
 // Also does any processing needed with the commands.
 type hub struct {
-	// All current connections, and their outbound channel.
-	clients map[net.Conn]chan<- baps3.Message
+	// All current clients.
+	clients map[*Client]bool
 
 	// For communication with the connector.
 	cReqCh chan<- baps3.Message
@@ -27,7 +27,7 @@ type hub struct {
 }
 
 var h = hub{
-	clients: make(map[net.Conn]chan<- baps3.Message),
+	clients: make(map[*Client]bool),
 
 	reqCh: make(chan baps3.Message),
 
@@ -73,8 +73,8 @@ func (h *hub) processRequest(req baps3.Message) {
 func (h *hub) processResponse(res baps3.Message) {
 	// TODO: Do something else
 	log.Println("New response:", res.String())
-	for _, ch := range h.clients {
-		ch <- res
+	for c, _ := range h.clients {
+		c.resCh <- res
 	}
 }
 
@@ -106,19 +106,19 @@ func (h *hub) runListener(addr string, port string) {
 		case msg := <-h.reqCh:
 			h.processRequest(msg)
 		case client := <-h.addCh:
-			h.clients[client.conn] = client.resCh
+			h.clients[client] = true
 			client.resCh <- *makeWelcomeMsg()
 			client.resCh <- *makeFeaturesMsg()
 			log.Println("New connection from", client.conn.RemoteAddr())
 		case client := <-h.rmCh:
 			close(client.resCh)
-			delete(h.clients, client.conn)
+			delete(h.clients, client)
 			log.Println("Closed connection from", client.conn.RemoteAddr())
 		case <-h.Quit:
 			log.Println("Closing all connections")
-			for conn, ch := range h.clients {
-				close(ch)
-				delete(h.clients, conn)
+			for c, _ := range h.clients {
+				close(c.resCh)
+				delete(h.clients, c)
 			}
 			//			h.Quit <- true
 		}
