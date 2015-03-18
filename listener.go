@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net"
+	"strconv"
 
 	baps3 "github.com/UniversityRadioYork/baps3-go"
 )
@@ -16,6 +17,9 @@ type hub struct {
 	// Dump state from the downstream service (playd)
 	downstreamVersion  string
 	downstreamFeatures baps3.FeatureSet
+
+	// Playlist instance
+	pl *Playlist
 
 	// For communication with the downstream service.
 	cReqCh chan<- baps3.Message
@@ -34,6 +38,8 @@ var h = hub{
 	clients: make(map[*Client]bool),
 
 	downstreamFeatures: make(baps3.FeatureSet),
+
+	pl: InitPlaylist(),
 
 	reqCh: make(chan baps3.Message),
 
@@ -80,7 +86,18 @@ func makeFeaturesMsg() (msg *baps3.Message) {
 func (h *hub) processRequest(req baps3.Message) {
 	// TODO: Do something else
 	log.Println("New request:", req.String())
-	h.cReqCh <- req
+	switch req.Word() {
+	case baps3.RqDequeue:
+		if iStr, err := req.Arg(0); err != nil {
+			//	c.resCh <- baps3.New(baps3.RsWhat)
+			hash, _ := req.Arg(1)
+			i, _ := strconv.Atoi(iStr)
+			h.pl.Dequeue(i, hash)
+		}
+
+	default:
+		h.cReqCh <- req
+	}
 }
 
 // Processes a response from the downstream service.
