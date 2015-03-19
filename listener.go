@@ -8,6 +8,11 @@ import (
 	baps3 "github.com/UniversityRadioYork/baps3-go"
 )
 
+type clientAndMessage struct {
+	c   *Client
+	msg baps3.Message
+}
+
 // Maintains communications with the downstream service and connected clients.
 // Also does any processing needed with the commands.
 type hub struct {
@@ -26,7 +31,7 @@ type hub struct {
 	cResCh <-chan baps3.Message
 
 	// Where new requests from clients come through.
-	reqCh chan baps3.Message
+	reqCh chan clientAndMessage
 
 	// Handlers for adding/removing connections.
 	addCh chan *Client
@@ -41,7 +46,7 @@ var h = hub{
 
 	pl: InitPlaylist(),
 
-	reqCh: make(chan baps3.Message),
+	reqCh: make(chan clientAndMessage),
 
 	addCh: make(chan *Client),
 	rmCh:  make(chan *Client),
@@ -81,18 +86,47 @@ func makeFeaturesMsg() (msg *baps3.Message) {
 	return
 }
 
+func sendInvalidCmd(c *Client, errType baps3.MessageWord, errStr string, oldCmd baps3.Message) {
+	msg := baps3.NewMessage(errType).AddArg(errStr)
+	for _, w := range oldCmd.AsSlice() {
+		msg.AddArg(w)
+	}
+	c.resCh <- *msg
+}
+
+func (h *hub) processReqDequeue(req baps3.Message) (baps3.MessageWord, string) {
+	iStr, err := req.Arg(0)
+	if err != nil {
+		return baps3.RsWhat, "Bad command"
+	}
+
+	hash, err := req.Arg(1)
+	if err != nil {
+		return baps3.RsWhat, "Bad command"
+	}
+
+	i, err := strconv.Atoi(iStr)
+	if err != nil {
+		return baps3.RsWhat, "Bad index"
+	}
+
+	rmIdx, rmHash, err := h.pl.Dequeue(i, hash)
+	if err != nil {
+		return baps3.RsFail, err.Error()
+	}
+	h.broadcast(*baps3.NewMessage(baps3.RsDequeue).AddArg(strconv.Itoa(rmIdx)).AddArg(rmHash))
+	return baps3.BadWord, "" // No error
+}
+
 // Handles a request from a client.
 // Falls through to the connector cReqCh if command is "not understood".
-func (h *hub) processRequest(req baps3.Message) {
+func (h *hub) processRequest(c *Client, req baps3.Message) {
 	// TODO: Do something else
 	log.Println("New request:", req.String())
 	switch req.Word() {
 	case baps3.RqDequeue:
-		if iStr, err := req.Arg(0); err != nil {
-			//	c.resCh <- baps3.New(baps3.RsWhat)
-			hash, _ := req.Arg(1)
-			i, _ := strconv.Atoi(iStr)
-			h.pl.Dequeue(i, hash)
+		if errType, errStr := h.processReqDequeue(req); errType != baps3.BadWord {
+			sendInvalidCmd(c, errType, errStr, req)
 		}
 
 	default:
@@ -150,8 +184,8 @@ func (h *hub) runListener(addr string, port string) {
 		select {
 		case msg := <-h.cResCh:
 			h.processResponse(msg)
-		case msg := <-h.reqCh:
-			h.processRequest(msg)
+		case data := <-h.reqCh:
+			h.processRequest(data.c, data.msg)
 		case client := <-h.addCh:
 			h.clients[client] = true
 			client.resCh <- *makeWelcomeMsg()

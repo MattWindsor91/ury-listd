@@ -23,6 +23,13 @@ func InitPlaylist() *Playlist {
 }
 
 func (pl *Playlist) Enqueue(idx int, item *PlaylistItem) (newIdx int, err error) {
+	for _, it := range pl.items {
+		if it.Hash == item.Hash {
+			err = fmt.Errorf("Hash already exists")
+			return
+		}
+	}
+
 	if idx, err = pl.resolveIndex(idx); err != nil {
 		return
 	}
@@ -37,7 +44,7 @@ func (pl *Playlist) Dequeue(idx int, hash string) (oldIdx int, oldHash string, e
 		return
 	}
 	if pl.items[idx].Hash != hash {
-		err = fmt.Errorf("hash does not match")
+		err = fmt.Errorf("Hash does not match")
 		return
 	}
 	oldIdx, oldHash = idx, pl.items[idx].Hash
@@ -51,7 +58,7 @@ func (pl *Playlist) Select(idx int, hash string) (curIdx int, curHash string, er
 		return
 	}
 	if pl.items[idx].Hash != hash {
-		err = fmt.Errorf("hash does not match")
+		err = fmt.Errorf("Hash does not match")
 		return
 	}
 	pl.selection = idx
@@ -82,7 +89,7 @@ func (pl *Playlist) resolveIndex(idx int) (resolved int, err error) {
 	resolved += idx
 	if resolved < 0 || resolved >= len(pl.items) {
 		// Out of range, in some direction
-		err = fmt.Errorf("index out of range")
+		err = fmt.Errorf("Index out of range")
 	}
 	return
 }

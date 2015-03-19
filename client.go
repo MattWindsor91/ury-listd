@@ -19,7 +19,7 @@ type Client struct {
 
 // Reads data from a client connection. All received request messages get sent down reqCh.
 // Bails if reading bytes causes an error, which gets the connection unregistered and disconnected.
-func (c *Client) Read(reqCh chan<- baps3.Message, rmCh chan<- *Client) {
+func (c *Client) Read(reqCh chan<- clientAndMessage, rmCh chan<- *Client) {
 	reader := bufio.NewReader(c.conn)
 	for {
 		// Get new request
@@ -40,7 +40,7 @@ func (c *Client) Read(reqCh chan<- baps3.Message, rmCh chan<- *Client) {
 				log.Println(err)
 				continue // TODO: Do something?
 			}
-			reqCh <- *msg
+			reqCh <- clientAndMessage{c, *msg}
 		}
 	}
 }
