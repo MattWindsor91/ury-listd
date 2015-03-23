@@ -39,7 +39,6 @@ func main() {
 		log.Fatal("Error parsing args: " + err.Error())
 	}
 
-	// Set up connection to playout
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT)
 
