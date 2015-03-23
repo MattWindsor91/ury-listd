@@ -58,7 +58,7 @@ func (h *hub) handleNewConnection(conn net.Conn) {
 
 // Prepends the connector's version (from the OHAI) to the listd version.
 func makeWelcomeMsg() *baps3.Message {
-	return baps3.NewMessage(baps3.RsOhai).AddArg(h.cVersion + "/listd-" + LD_VERSION)
+	return baps3.NewMessage(baps3.RsOhai).AddArg(h.cVersion + "/listd " + LD_VERSION)
 }
 
 func makeFeaturesMsg() *baps3.Message {
