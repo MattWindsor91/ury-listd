@@ -7,16 +7,17 @@ import (
 	baps3 "github.com/UniversityRadioYork/baps3-go"
 )
 
-// Maintains communications with the connector and connected clients.
+// Maintains communications with the downstream service and connected clients.
 // Also does any processing needed with the commands.
 type hub struct {
 	// All current clients.
 	clients map[*Client]bool
 
-	// Version string from the connector (playd)
-	cVersion string
+	// Dump state from the downstream service (playd)
+	downstreamVersion  string
+	downstreamFeatures baps3.FeatureSet
 
-	// For communication with the connector.
+	// For communication with the downstream service.
 	cReqCh chan<- baps3.Message
 	cResCh <-chan baps3.Message
 
@@ -31,6 +32,8 @@ type hub struct {
 
 var h = hub{
 	clients: make(map[*Client]bool),
+
+	downstreamFeatures: make(baps3.FeatureSet),
 
 	reqCh: make(chan baps3.Message),
 
@@ -56,14 +59,20 @@ func (h *hub) handleNewConnection(conn net.Conn) {
 	client.Write(client.resCh, h.rmCh)
 }
 
-// Prepends the connector's version (from the OHAI) to the listd version.
+// Appends the downstream service's version (from the OHAI) to the listd version.
 func makeWelcomeMsg() *baps3.Message {
-	return baps3.NewMessage(baps3.RsOhai).AddArg(h.cVersion + "/listd " + LD_VERSION)
+	return baps3.NewMessage(baps3.RsOhai).AddArg("listd " + LD_VERSION + "/" + h.downstreamVersion)
 }
 
-func makeFeaturesMsg() *baps3.Message {
-	// TODO: Implement actual features
-	return baps3.NewMessage(baps3.RsFeatures)
+// Crafts the features message by adding listd's features to the downstream service's and removing
+// features listd intercepts.
+func makeFeaturesMsg() (msg *baps3.Message) {
+	features := h.downstreamFeatures
+	features.DelFeature(baps3.FtFileLoad) // 'Mask' the features listd intercepts
+	features.AddFeature(baps3.FtPlaylist)
+	features.AddFeature(baps3.FtPlaylistTextItems)
+	msg = features.ToMessage()
+	return
 }
 
 // Handles a request from a client.
@@ -74,13 +83,19 @@ func (h *hub) processRequest(req baps3.Message) {
 	h.cReqCh <- req
 }
 
-// Processes a response from the connector.
+// Processes a response from the downstream service.
 func (h *hub) processResponse(res baps3.Message) {
 	// TODO: Do something else
 	log.Println("New response:", res.String())
 	switch res.Word() {
 	case baps3.RsOhai:
-		h.cVersion, _ = res.Arg(0)
+		h.downstreamVersion, _ = res.Arg(0)
+	case baps3.RsFeatures:
+		fs, err := baps3.FeatureSetFromMsg(&res)
+		if err != nil {
+			log.Fatal("Error reading features: " + err.Error())
+		}
+		h.downstreamFeatures = fs
 	default:
 		h.broadcast(res)
 	}
