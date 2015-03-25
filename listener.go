@@ -7,7 +7,7 @@ import (
 	baps3 "github.com/UniversityRadioYork/baps3-go"
 )
 
-// Maintains communications with the connector and connected clients.
+// Maintains communications with the downstream service and connected clients.
 // Also does any processing needed with the commands.
 type hub struct {
 	// All current clients.
@@ -17,7 +17,7 @@ type hub struct {
 	downstreamVersion  string
 	downstreamFeatures baps3.FeatureSet
 
-	// For communication with the connector.
+	// For communication with the downstream service.
 	cReqCh chan<- baps3.Message
 	cResCh <-chan baps3.Message
 
@@ -83,7 +83,7 @@ func (h *hub) processRequest(req baps3.Message) {
 	h.cReqCh <- req
 }
 
-// Processes a response from the connector.
+// Processes a response from the downstream service.
 func (h *hub) processResponse(res baps3.Message) {
 	// TODO: Do something else
 	log.Println("New response:", res.String())
