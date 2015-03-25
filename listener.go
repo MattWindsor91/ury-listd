@@ -13,8 +13,9 @@ type hub struct {
 	// All current clients.
 	clients map[*Client]bool
 
-	// Version string from the connector (playd)
-	cVersion string
+	// Dump state from the downstream service (playd)
+	downstreamVersion  string
+	downstreamFeatures baps3.FeatureSet
 
 	// For communication with the connector.
 	cReqCh chan<- baps3.Message
@@ -31,6 +32,8 @@ type hub struct {
 
 var h = hub{
 	clients: make(map[*Client]bool),
+
+	downstreamFeatures: make(baps3.FeatureSet),
 
 	reqCh: make(chan baps3.Message),
 
@@ -61,9 +64,15 @@ func makeWelcomeMsg() *baps3.Message {
 	return baps3.NewMessage(baps3.RsOhai).AddArg("listd " + LD_VERSION + "/" + h.downstreamVersion)
 }
 
-func makeFeaturesMsg() *baps3.Message {
-	// TODO: Implement actual features
-	return baps3.NewMessage(baps3.RsFeatures)
+// Crafts the features message by adding listd's features to the downstream service's and removing
+// features listd intercepts.
+func makeFeaturesMsg() (msg *baps3.Message) {
+	features := h.downstreamFeatures
+	features.DelFeature(baps3.FtFileLoad) // 'Mask' the features listd intercepts
+	features.AddFeature(baps3.FtPlaylist)
+	features.AddFeature(baps3.FtPlaylistTextItems)
+	msg = features.ToMessage()
+	return
 }
 
 // Handles a request from a client.
@@ -80,7 +89,13 @@ func (h *hub) processResponse(res baps3.Message) {
 	log.Println("New response:", res.String())
 	switch res.Word() {
 	case baps3.RsOhai:
-		h.cVersion, _ = res.Arg(0)
+		h.downstreamVersion, _ = res.Arg(0)
+	case baps3.RsFeatures:
+		fs, err := baps3.FeatureSetFromMsg(&res)
+		if err != nil {
+			log.Fatal("Error reading features: " + err.Error())
+		}
+		h.downstreamFeatures = fs
 	default:
 		h.broadcast(res)
 	}
