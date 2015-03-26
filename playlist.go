@@ -18,6 +18,7 @@ type Playlist struct {
 func InitPlaylist() *Playlist {
 	pl := &Playlist{
 		selection: -1,
+		items:     []*PlaylistItem{},
 	}
 	return pl
 }
