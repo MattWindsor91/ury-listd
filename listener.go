@@ -39,20 +39,6 @@ type hub struct {
 	Quit  chan bool
 }
 
-var h = hub{
-	clients: make(map[*Client]bool),
-
-	downstreamFeatures: make(baps3.FeatureSet),
-
-	pl: InitPlaylist(),
-
-	reqCh: make(chan clientAndMessage),
-
-	addCh: make(chan *Client),
-	rmCh:  make(chan *Client),
-	Quit:  make(chan bool),
-}
-
 // Handles a new client connection.
 // conn is the new connection object.
 func (h *hub) handleNewConnection(conn net.Conn) {
@@ -71,13 +57,13 @@ func (h *hub) handleNewConnection(conn net.Conn) {
 }
 
 // Appends the downstream service's version (from the OHAI) to the listd version.
-func makeWelcomeMsg() *baps3.Message {
+func (h *hub) makeWelcomeMsg() *baps3.Message {
 	return baps3.NewMessage(baps3.RsOhai).AddArg("listd " + LD_VERSION + "/" + h.downstreamVersion)
 }
 
 // Crafts the features message by adding listd's features to the downstream service's and removing
 // features listd intercepts.
-func makeFeaturesMsg() (msg *baps3.Message) {
+func (h *hub) makeFeaturesMsg() (msg *baps3.Message) {
 	features := h.downstreamFeatures
 	features.DelFeature(baps3.FtFileLoad) // 'Mask' the features listd intercepts
 	features.AddFeature(baps3.FtPlaylist)
@@ -188,8 +174,8 @@ func (h *hub) runListener(addr string, port string) {
 			h.processRequest(data.c, data.msg)
 		case client := <-h.addCh:
 			h.clients[client] = true
-			client.resCh <- *makeWelcomeMsg()
-			client.resCh <- *makeFeaturesMsg()
+			client.resCh <- *h.makeWelcomeMsg()
+			client.resCh <- *h.makeFeaturesMsg()
 			log.Println("New connection from", client.conn.RemoteAddr())
 		case client := <-h.rmCh:
 			close(client.resCh)
