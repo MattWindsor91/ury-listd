@@ -81,15 +81,11 @@ func sendInvalidCmd(c *Client, errType baps3.MessageWord, errStr string, oldCmd 
 }
 
 func (h *hub) processReqDequeue(req baps3.Message) (baps3.MessageWord, string) {
-	iStr, err := req.Arg(0)
-	if err != nil {
+	args := req.AsSlice()[1:]
+	if len(args) != 2 {
 		return baps3.RsWhat, "Bad command"
 	}
-
-	hash, err := req.Arg(1)
-	if err != nil {
-		return baps3.RsWhat, "Bad command"
-	}
+	iStr, hash := args[0], args[1]
 
 	i, err := strconv.Atoi(iStr)
 	if err != nil {
@@ -105,25 +101,11 @@ func (h *hub) processReqDequeue(req baps3.Message) (baps3.MessageWord, string) {
 }
 
 func (h *hub) processReqEnqueue(req baps3.Message) (baps3.MessageWord, string) {
-	iStr, err := req.Arg(0)
-	if err != nil {
+	args := req.AsSlice()[1:]
+	if len(args) != 4 {
 		return baps3.RsWhat, "Bad command"
 	}
-
-	hash, err := req.Arg(1)
-	if err != nil {
-		return baps3.RsWhat, "Bad command"
-	}
-
-	itemType, err := req.Arg(2)
-	if err != nil {
-		return baps3.RsWhat, "Bad command"
-	}
-
-	arg, err := req.Arg(3)
-	if err != nil {
-		return baps3.RsWhat, "Bad command"
-	}
+	iStr, hash, itemType, data := args[0], args[1], args[2], args[3]
 
 	i, err := strconv.Atoi(iStr)
 	if err != nil {
@@ -134,12 +116,12 @@ func (h *hub) processReqEnqueue(req baps3.Message) (baps3.MessageWord, string) {
 		return baps3.RsWhat, "Bad item type"
 	}
 
-	item := &PlaylistItem{Data: arg, Hash: hash, IsFile: itemType == "file"}
+	item := &PlaylistItem{Data: data, Hash: hash, IsFile: itemType == "file"}
 	newIdx, err := h.pl.Enqueue(i, item)
 	if err != nil {
 		return baps3.RsFail, err.Error()
 	}
-	h.broadcast(*baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(arg))
+	h.broadcast(*baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(item.Data))
 	return baps3.BadWord, "" // No error
 }
 
