@@ -152,6 +152,10 @@ func processReqSelect(pl *Playlist, req baps3.Message) *baps3.Message {
 	}
 }
 
+func processReqReject(pl *Playlist, req baps3.Message) *baps3.Message {
+	return baps3.NewMessage(baps3.RsWhat).AddArg("Bad command")
+}
+
 func (h *hub) processReqList() {
 	h.broadcast(*baps3.NewMessage(baps3.RsCount).AddArg(strconv.Itoa(len(h.pl.items))))
 	for i, item := range h.pl.items {
@@ -167,6 +171,8 @@ var REQ_MAP = map[baps3.MessageWord]func(*Playlist, baps3.Message) *baps3.Messag
 	baps3.RqDequeue: processReqDequeue,
 	baps3.RqEnqueue: processReqEnqueue,
 	baps3.RqSelect:  processReqSelect,
+	baps3.RqLoad:    processReqReject,
+	baps3.RqEject:   processReqReject,
 }
 
 // Handles a request from a client.
