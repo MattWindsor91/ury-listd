@@ -120,7 +120,17 @@ func processReqEnqueue(pl *Playlist, req baps3.Message) *baps3.Message {
 		return baps3.NewMessage(baps3.RsFail).AddArg(err.Error())
 	}
 	return baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(item.Data)
+}
 
+func (h *hub) processReqList() {
+	h.broadcast(*baps3.NewMessage(baps3.RsCount).AddArg(strconv.Itoa(len(h.pl.items))))
+	for i, item := range h.pl.items {
+		typeStr := "file"
+		if !item.IsFile {
+			typeStr = "text"
+		}
+		h.broadcast(*baps3.NewMessage(baps3.RsItem).AddArg(strconv.Itoa(i)).AddArg(item.Hash).AddArg(typeStr).AddArg(item.Data))
+	}
 }
 
 var REQ_MAP = map[baps3.MessageWord]func(*Playlist, baps3.Message) *baps3.Message{
@@ -140,6 +150,9 @@ func (h *hub) processRequest(c *Client, req baps3.Message) {
 		} else {
 			h.broadcast(*resp)
 		}
+	} else if req.Word() == baps3.RqList {
+		// Of course there's one that doesn't fit the pattern
+		h.processReqList()
 	} else {
 		h.cReqCh <- req
 	}
