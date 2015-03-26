@@ -61,6 +61,11 @@ func (pl *Playlist) Select(idx int, hash string) (curIdx int, curHash string, er
 		err = fmt.Errorf("Hash does not match")
 		return
 	}
+	if !pl.items[idx].IsFile {
+		err = fmt.Errorf("Can only select a file")
+		return
+	}
+
 	pl.selection = idx
 	curIdx, curHash = pl.selection, pl.items[idx].Hash
 	return

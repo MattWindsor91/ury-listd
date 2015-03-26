@@ -122,6 +122,36 @@ func processReqEnqueue(pl *Playlist, req baps3.Message) *baps3.Message {
 	return baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(item.Data)
 }
 
+func processReqSelect(pl *Playlist, req baps3.Message) *baps3.Message {
+	args := req.AsSlice()[1:]
+	if len(args) == 0 {
+		// TODO: Should we care about there not being an existing selection?
+		// TODO: Move this logic to playlist.go?
+		if pl.selection < 0 {
+			return baps3.NewMessage(baps3.RsFail).AddArg("No selection to remove")
+		}
+		pl.selection = -1
+		return baps3.NewMessage(baps3.RsSelect)
+
+	} else if len(args) == 2 {
+		iStr, hash := args[0], args[1]
+
+		i, err := strconv.Atoi(iStr)
+		if err != nil {
+			return baps3.NewMessage(baps3.RsWhat).AddArg("Bad index")
+		}
+
+		newIdx, newHash, err := pl.Select(i, hash)
+		if err != nil {
+			return baps3.NewMessage(baps3.RsFail).AddArg(err.Error())
+		}
+
+		return baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(newIdx)).AddArg(newHash)
+	} else {
+		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad command")
+	}
+}
+
 func (h *hub) processReqList() {
 	h.broadcast(*baps3.NewMessage(baps3.RsCount).AddArg(strconv.Itoa(len(h.pl.items))))
 	for i, item := range h.pl.items {
@@ -136,6 +166,7 @@ func (h *hub) processReqList() {
 var REQ_MAP = map[baps3.MessageWord]func(*Playlist, baps3.Message) *baps3.Message{
 	baps3.RqDequeue: processReqDequeue,
 	baps3.RqEnqueue: processReqEnqueue,
+	baps3.RqSelect:  processReqSelect,
 }
 
 // Handles a request from a client.
