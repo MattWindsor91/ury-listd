@@ -186,6 +186,9 @@ func (h *hub) processRequest(c *Client, req baps3.Message) {
 			h.broadcast(*resp)
 		}
 
+	case baps3.RqList:
+		h.processReqList()
+
 	case baps3.RqSelect:
 		resp := processReqSelect(h.pl, req)
 		if resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
