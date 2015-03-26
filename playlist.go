@@ -92,7 +92,7 @@ func (pl *Playlist) resolveIndex(idx int) (resolved int, err error) {
 		resolved = len(pl.items)
 	}
 	resolved += idx
-	if resolved < 0 || resolved >= len(pl.items) {
+	if resolved < 0 || resolved > len(pl.items) {
 		// Out of range, in some direction
 		err = fmt.Errorf("Index out of range")
 	}
