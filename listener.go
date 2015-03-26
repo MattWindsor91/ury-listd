@@ -72,75 +72,75 @@ func (h *hub) makeFeaturesMsg() (msg *baps3.Message) {
 	return
 }
 
-func sendInvalidCmd(c *Client, errType baps3.MessageWord, errStr string, oldCmd baps3.Message) {
-	msg := baps3.NewMessage(errType).AddArg(errStr)
+func sendInvalidCmd(c *Client, errRes baps3.Message, oldCmd baps3.Message) {
 	for _, w := range oldCmd.AsSlice() {
-		msg.AddArg(w)
+		errRes.AddArg(w)
 	}
-	c.resCh <- *msg
+	c.resCh <- errRes
 }
 
-func (h *hub) processReqDequeue(req baps3.Message) (baps3.MessageWord, string) {
+func processReqDequeue(pl *Playlist, req baps3.Message) *baps3.Message {
 	args := req.AsSlice()[1:]
 	if len(args) != 2 {
-		return baps3.RsWhat, "Bad command"
+		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad command")
 	}
 	iStr, hash := args[0], args[1]
 
 	i, err := strconv.Atoi(iStr)
 	if err != nil {
-		return baps3.RsWhat, "Bad index"
+		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad index")
 	}
 
-	rmIdx, rmHash, err := h.pl.Dequeue(i, hash)
+	rmIdx, rmHash, err := pl.Dequeue(i, hash)
 	if err != nil {
-		return baps3.RsFail, err.Error()
+		return baps3.NewMessage(baps3.RsFail).AddArg(err.Error())
 	}
-	h.broadcast(*baps3.NewMessage(baps3.RsDequeue).AddArg(strconv.Itoa(rmIdx)).AddArg(rmHash))
-	return baps3.BadWord, "" // No error
+	return baps3.NewMessage(baps3.RsDequeue).AddArg(strconv.Itoa(rmIdx)).AddArg(rmHash)
 }
 
-func (h *hub) processReqEnqueue(req baps3.Message) (baps3.MessageWord, string) {
+func processReqEnqueue(pl *Playlist, req baps3.Message) *baps3.Message {
 	args := req.AsSlice()[1:]
 	if len(args) != 4 {
-		return baps3.RsWhat, "Bad command"
+		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad command")
 	}
 	iStr, hash, itemType, data := args[0], args[1], args[2], args[3]
 
 	i, err := strconv.Atoi(iStr)
 	if err != nil {
-		return baps3.RsWhat, "Bad index"
+		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad index")
 	}
 
 	if itemType != "file" && itemType != "text" {
-		return baps3.RsWhat, "Bad item type"
+		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad item type")
 	}
 
 	item := &PlaylistItem{Data: data, Hash: hash, IsFile: itemType == "file"}
-	newIdx, err := h.pl.Enqueue(i, item)
+	newIdx, err := pl.Enqueue(i, item)
 	if err != nil {
-		return baps3.RsFail, err.Error()
+		return baps3.NewMessage(baps3.RsFail).AddArg(err.Error())
 	}
-	h.broadcast(*baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(item.Data))
-	return baps3.BadWord, "" // No error
+	return baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(item.Data)
+
+}
+
+var REQ_MAP = map[baps3.MessageWord]func(*Playlist, baps3.Message) *baps3.Message{
+	baps3.RqDequeue: processReqDequeue,
+	baps3.RqEnqueue: processReqEnqueue,
 }
 
 // Handles a request from a client.
 // Falls through to the connector cReqCh if command is "not understood".
 func (h *hub) processRequest(c *Client, req baps3.Message) {
-	// TODO: Do something else
 	log.Println("New request:", req.String())
-	switch req.Word() {
-	case baps3.RqDequeue:
-		if errType, errStr := h.processReqDequeue(req); errType != baps3.BadWord {
-			sendInvalidCmd(c, errType, errStr, req)
+	if reqFunc, ok := REQ_MAP[req.Word()]; ok {
+		// TODO: Add a "is fail word" func to baps3-go?
+		if resp := reqFunc(h.pl, req); resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
+			// failures only go to sender
+			sendInvalidCmd(c, *resp, req)
+		} else {
+			h.broadcast(*resp)
 		}
-	case baps3.RqEnqueue:
-		if errType, errStr := h.processReqEnqueue(req); errType != baps3.BadWord {
-			sendInvalidCmd(c, errType, errStr, req)
-		}
-
-	default:
+	} else {
 		h.cReqCh <- req
 	}
 }
