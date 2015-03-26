@@ -152,10 +152,6 @@ func processReqSelect(pl *Playlist, req baps3.Message) *baps3.Message {
 	}
 }
 
-func processReqReject(pl *Playlist, req baps3.Message) *baps3.Message {
-	return baps3.NewMessage(baps3.RsWhat).AddArg("Bad command")
-}
-
 func (h *hub) processReqList() {
 	h.broadcast(*baps3.NewMessage(baps3.RsCount).AddArg(strconv.Itoa(len(h.pl.items))))
 	for i, item := range h.pl.items {
@@ -167,30 +163,46 @@ func (h *hub) processReqList() {
 	}
 }
 
-var REQ_MAP = map[baps3.MessageWord]func(*Playlist, baps3.Message) *baps3.Message{
-	baps3.RqDequeue: processReqDequeue,
-	baps3.RqEnqueue: processReqEnqueue,
-	baps3.RqSelect:  processReqSelect,
-	baps3.RqLoad:    processReqReject,
-	baps3.RqEject:   processReqReject,
-}
-
 // Handles a request from a client.
 // Falls through to the connector cReqCh if command is "not understood".
 func (h *hub) processRequest(c *Client, req baps3.Message) {
 	log.Println("New request:", req.String())
-	if reqFunc, ok := REQ_MAP[req.Word()]; ok {
+	switch req.Word() {
+	case baps3.RqEnqueue:
+		resp := processReqEnqueue(h.pl, req)
 		// TODO: Add a "is fail word" func to baps3-go?
-		if resp := reqFunc(h.pl, req); resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
+		if resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
 			// failures only go to sender
 			sendInvalidCmd(c, *resp, req)
 		} else {
 			h.broadcast(*resp)
 		}
-	} else if req.Word() == baps3.RqList {
-		// Of course there's one that doesn't fit the pattern
-		h.processReqList()
-	} else {
+	case baps3.RqDequeue:
+		// TODO: Eep, such code duplication
+		resp := processReqDequeue(h.pl, req)
+		if resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
+			sendInvalidCmd(c, *resp, req)
+		} else {
+			h.broadcast(*resp)
+		}
+
+	case baps3.RqSelect:
+		resp := processReqSelect(h.pl, req)
+		if resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
+			sendInvalidCmd(c, *resp, req)
+		} else {
+			if h.pl.selection >= 0 {
+				h.cReqCh <- *baps3.NewMessage(baps3.RqLoad).AddArg(h.pl.items[h.pl.selection].Data)
+			} else {
+				h.cReqCh <- *baps3.NewMessage(baps3.RqEject)
+			}
+			h.broadcast(*resp)
+		}
+
+	case baps3.RqLoad:
+	case baps3.RqEject:
+		h.broadcast(*baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
+	default:
 		h.cReqCh <- req
 	}
 }
