@@ -104,6 +104,45 @@ func (h *hub) processReqDequeue(req baps3.Message) (baps3.MessageWord, string) {
 	return baps3.BadWord, "" // No error
 }
 
+func (h *hub) processReqEnqueue(req baps3.Message) (baps3.MessageWord, string) {
+	iStr, err := req.Arg(0)
+	if err != nil {
+		return baps3.RsWhat, "Bad command"
+	}
+
+	hash, err := req.Arg(1)
+	if err != nil {
+		return baps3.RsWhat, "Bad command"
+	}
+
+	itemType, err := req.Arg(2)
+	if err != nil {
+		return baps3.RsWhat, "Bad command"
+	}
+
+	arg, err := req.Arg(3)
+	if err != nil {
+		return baps3.RsWhat, "Bad command"
+	}
+
+	i, err := strconv.Atoi(iStr)
+	if err != nil {
+		return baps3.RsWhat, "Bad index"
+	}
+
+	if itemType != "file" && itemType != "text" {
+		return baps3.RsWhat, "Bad item type"
+	}
+
+	item := &PlaylistItem{Data: arg, Hash: hash, IsFile: itemType == "file"}
+	newIdx, err := h.pl.Enqueue(i, item)
+	if err != nil {
+		return baps3.RsFail, err.Error()
+	}
+	h.broadcast(*baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(arg))
+	return baps3.BadWord, "" // No error
+}
+
 // Handles a request from a client.
 // Falls through to the connector cReqCh if command is "not understood".
 func (h *hub) processRequest(c *Client, req baps3.Message) {
@@ -112,6 +151,10 @@ func (h *hub) processRequest(c *Client, req baps3.Message) {
 	switch req.Word() {
 	case baps3.RqDequeue:
 		if errType, errStr := h.processReqDequeue(req); errType != baps3.BadWord {
+			sendInvalidCmd(c, errType, errStr, req)
+		}
+	case baps3.RqEnqueue:
+		if errType, errStr := h.processReqEnqueue(req); errType != baps3.BadWord {
 			sendInvalidCmd(c, errType, errStr, req)
 		}
 
