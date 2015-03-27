@@ -36,11 +36,11 @@ func TestEnqueue(t *testing.T) {
 	}{
 		{
 			InitPlaylist(),
-			&PlaylistItem{"I am lorde ya ya ya", "aaa", true},
+			&PlaylistItem{"/Music/theballadofbilbobaggins.mp3", "aaa", true},
 			0,
 			&Playlist{
 				[]*PlaylistItem{
-					&PlaylistItem{"I am lorde ya ya ya", "aaa", true},
+					&PlaylistItem{"/Music/theballadofbilbobaggins.mp3", "aaa", true},
 				},
 				-1,
 			},
@@ -49,12 +49,10 @@ func TestEnqueue(t *testing.T) {
 		// Test invalid index
 		{
 			InitPlaylist(),
-			&PlaylistItem{"I am lorde ya ya ya", "aaa", true},
+			&PlaylistItem{"/Music/iamlordeyayaya.wav", "aaa", true},
 			1,
 			&Playlist{
-				[]*PlaylistItem{
-					&PlaylistItem{"I am lorde ya ya ya", "aaa", true},
-				},
+				[]*PlaylistItem{},
 				-1,
 			},
 			true,
