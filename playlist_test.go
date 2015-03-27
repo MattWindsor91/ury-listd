@@ -57,6 +57,24 @@ func TestEnqueue(t *testing.T) {
 			},
 			true,
 		},
+		// Test hash collision
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"I am lorde ya ya ya", "aaa", true},
+				},
+				-1,
+			},
+			&PlaylistItem{"I too am lorde", "aaa", true},
+			1,
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"I am lorde ya ya ya", "aaa", true},
+				},
+				-1,
+			},
+			true,
+		},
 	}
 
 	for caseno, c := range cases {
@@ -70,6 +88,240 @@ func TestEnqueue(t *testing.T) {
 		}
 		if !reflect.DeepEqual(c.before, c.want) {
 			t.Errorf("TestEnqueue: %q != %q", c.before, c.want)
+		}
+	}
+}
+
+func TestDequeue(t *testing.T) {
+	cases := []struct {
+		before      *Playlist
+		index       int
+		hash        string
+		want        *Playlist
+		shoulderror bool
+	}{
+		// Test dequeue
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"darude - sandstorm.avi", "a1", true},
+				},
+				-1,
+			},
+			0,
+			"a1",
+			&Playlist{
+				[]*PlaylistItem{},
+				-1,
+			},
+			false,
+		},
+		// Test dequeue empty
+		{
+			InitPlaylist(),
+			0,
+			"yayaya",
+			&Playlist{
+				[]*PlaylistItem{},
+				-1,
+			},
+			true,
+		},
+		// Test mismatching index and hash
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"a_walk_in_the_black_forest.ogg", "a1", true},
+					&PlaylistItem{"cactus_in_my_yfronts.mid", "b2", true},
+				},
+				-1,
+			},
+			0,
+			"b2",
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"a_walk_in_the_black_forest.ogg", "a1", true},
+					&PlaylistItem{"cactus_in_my_yfronts.mid", "b2", true},
+				},
+				-1,
+			},
+			true,
+		},
+		// Test invalid index
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"a_walk_in_the_black_forest.ogg", "a1", true},
+					&PlaylistItem{"cactus_in_my_yfronts.mid", "b2", true},
+				},
+				-1,
+			},
+			1337,
+			"b2",
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"a_walk_in_the_black_forest.ogg", "a1", true},
+					&PlaylistItem{"cactus_in_my_yfronts.mid", "b2", true},
+				},
+				-1,
+			},
+			true,
+		},
+		// Test invalid hash
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"a_walk_in_the_black_forest.ogg", "a1", true},
+					&PlaylistItem{"cactus_in_my_yfronts.mid", "b2", true},
+				},
+				-1,
+			},
+			0,
+			"c3",
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"a_walk_in_the_black_forest.ogg", "a1", true},
+					&PlaylistItem{"cactus_in_my_yfronts.mid", "b2", true},
+				},
+				-1,
+			},
+			true,
+		},
+	}
+
+	for caseno, c := range cases {
+		_, _, err := c.before.Dequeue(c.index, c.hash)
+		if c.shoulderror != (err != nil) {
+			if err != nil {
+				t.Errorf("TestEnqueue: case %d returned err when should be nil(%s)", caseno, err.Error())
+			} else {
+				t.Errorf("TestEnqueue: case %d returned nil when should be err", caseno)
+			}
+		}
+		if !reflect.DeepEqual(c.before, c.want) {
+			t.Errorf("TestDequeue: %q != %q", c.before, c.want)
+		}
+	}
+}
+
+func TestSelect(t *testing.T) {
+	cases := []struct {
+		before      *Playlist
+		index       int
+		hash        string
+		want        *Playlist
+		shoulderror bool
+	}{
+		// Test select
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"airhorn.aac", "a1", true},
+				},
+				-1,
+			},
+			0,
+			"a1",
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"airhorn.aac", "a1", true},
+				},
+				0,
+			},
+			false,
+		},
+		// Test invalid select
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"airhorn.aac", "a1", true},
+				},
+				-1,
+			},
+			69,
+			"lol",
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"airhorn.aac", "a1", true},
+				},
+				-1,
+			},
+			true,
+		},
+		// Test invalid hash
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"illuminati.aiff", "hl3", true},
+				},
+				-1,
+			},
+			0,
+			"notreally",
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"illuminati.aiff", "hl3", true},
+				},
+				-1,
+			},
+			true,
+		},
+		// Test invalid index
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"harderbetterfastergaben.opus", "pootis", true},
+				},
+				-1,
+			},
+			3,
+			"pootis",
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"harderbetterfastergaben.opus", "pootis", true},
+				},
+				-1,
+			},
+			true,
+		},
+		// Test error on selecting text item
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"Half life 3", "hl3", false},
+				},
+				-1,
+			},
+			0,
+			"hl3",
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"Half life 3", "hl3", false},
+				},
+				-1,
+			},
+			true,
+		},
+	}
+
+	for caseno, c := range cases {
+		curindex, curhash, err := c.before.Select(c.index, c.hash)
+		if c.shoulderror != (err != nil) { // If err value is unexpected
+			if err != nil {
+				t.Errorf("TestSelect: case %d returned err when should be nil(%s)", caseno, err.Error())
+			} else {
+				t.Errorf("TestSelect: case %d returned nil when should be err", caseno)
+			}
+		} else if !c.shoulderror {
+			if curindex != c.index {
+				t.Errorf("TestSelect: returned index does not match requested, and err is nil")
+			}
+			if curhash != c.hash {
+				t.Errorf("TestSelect: returned hash does not match requested, and err is nil")
+			}
+		}
+		if !reflect.DeepEqual(c.before, c.want) {
+			t.Errorf("TestSelect: %q != %q", c.before, c.want)
 		}
 	}
 }
