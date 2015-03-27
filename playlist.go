@@ -32,7 +32,7 @@ func (pl *Playlist) Enqueue(idx int, item *PlaylistItem) (newIdx int, err error)
 	}
 
 	// appending on the end is necessary
-	if idx, err = pl.resolveIndex(idx); err != nil && idx != len(pl.items) {
+	if idx, err = pl.resolveIndex(idx, len(pl.items)+1); err != nil {
 		return
 	}
 	pl.insert(idx, item)
@@ -42,7 +42,7 @@ func (pl *Playlist) Enqueue(idx int, item *PlaylistItem) (newIdx int, err error)
 }
 
 func (pl *Playlist) Dequeue(idx int, hash string) (oldIdx int, oldHash string, err error) {
-	if idx, err = pl.resolveIndex(idx); err != nil {
+	if idx, err = pl.resolveIndex(idx, len(pl.items)); err != nil {
 		return
 	}
 	if pl.items[idx].Hash != hash {
@@ -56,7 +56,7 @@ func (pl *Playlist) Dequeue(idx int, hash string) (oldIdx int, oldHash string, e
 
 // TODO: Way of deselecting current selection
 func (pl *Playlist) Select(idx int, hash string) (curIdx int, curHash string, err error) {
-	if idx, err = pl.resolveIndex(idx); err != nil {
+	if idx, err = pl.resolveIndex(idx, len(pl.items)); err != nil {
 		return
 	}
 	if pl.items[idx].Hash != hash {
@@ -89,12 +89,12 @@ func (pl *Playlist) remove(i int) {
 	pl.items[len(pl.items)-1], pl.items = nil, append(pl.items[:i], pl.items[i+1:]...)
 }
 
-func (pl *Playlist) resolveIndex(idx int) (resolved int, err error) {
+func (pl *Playlist) resolveIndex(idx int, length int) (resolved int, err error) {
+	resolved = idx
 	if idx < 0 {
-		resolved = len(pl.items)
+		resolved += length
 	}
-	resolved += idx
-	if resolved < 0 || resolved >= len(pl.items) {
+	if resolved < 0 || resolved >= length {
 		// Out of range, in some direction
 		err = fmt.Errorf("Index out of range")
 	}
