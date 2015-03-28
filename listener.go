@@ -57,13 +57,13 @@ func (h *hub) handleNewConnection(conn net.Conn) {
 }
 
 // Appends the downstream service's version (from the OHAI) to the listd version.
-func (h *hub) makeWelcomeMsg() *baps3.Message {
+func (h *hub) makeRsOhai() *baps3.Message {
 	return baps3.NewMessage(baps3.RsOhai).AddArg("listd " + LD_VERSION + "/" + h.downstreamVersion)
 }
 
 // Crafts the features message by adding listd's features to the downstream service's and removing
 // features listd intercepts.
-func (h *hub) makeFeaturesMsg() (msg *baps3.Message) {
+func (h *hub) makeRsFeatures() (msg *baps3.Message) {
 	features := h.downstreamFeatures
 	features.DelFeature(baps3.FtFileLoad) // 'Mask' the features listd intercepts
 	features.AddFeature(baps3.FtPlaylist)
@@ -260,8 +260,8 @@ func (h *hub) runListener(addr string, port string) {
 			h.processRequest(data.c, data.msg)
 		case client := <-h.addCh:
 			h.clients[client] = true
-			client.resCh <- *h.makeWelcomeMsg()
-			client.resCh <- *h.makeFeaturesMsg()
+			client.resCh <- *h.makeRsOhai()
+			client.resCh <- *h.makeRsFeatures()
 			log.Println("New connection from", client.conn.RemoteAddr())
 		case client := <-h.rmCh:
 			close(client.resCh)
