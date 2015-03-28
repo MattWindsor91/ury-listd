@@ -168,6 +168,15 @@ func processReqLoadEject(pl *Playlist, req baps3.Message) (resps []*baps3.Messag
 	return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
 }
 
+func (h *hub) processReqDump() (msgs []*baps3.Message) {
+	msgs = append(msgs, baps3.NewMessage(baps3.RsState).AddArg(h.downstreamState.State))
+	if h.downstreamState.State != "Ejected" {
+		msgs = append(msgs, baps3.NewMessage(baps3.RsTime).AddArg(
+			strconv.FormatInt(h.downstreamState.Time.Nanoseconds()/1000, 10)))
+	}
+	return
+}
+
 var REQ_FUNC_MAP = map[baps3.MessageWord]func(*Playlist, baps3.Message) []*baps3.Message{
 	baps3.RqEnqueue: processReqEnqueue,
 	baps3.RqDequeue: processReqDequeue,
@@ -175,6 +184,7 @@ var REQ_FUNC_MAP = map[baps3.MessageWord]func(*Playlist, baps3.Message) []*baps3
 	baps3.RqList:    processReqList,
 	baps3.RqLoad:    processReqLoadEject,
 	baps3.RqEject:   processReqLoadEject,
+	baps3.RqDump:    processReqDump,
 }
 
 // Handles a request from a client.
@@ -259,6 +269,12 @@ func (h *hub) runListener(addr string, port string) {
 			h.clients[client] = true
 			client.resCh <- *h.makeRsOhai()
 			client.resCh <- *h.makeRsFeatures()
+			for _, msg := range h.processReqDump() {
+				client.resCh <- *msg
+			}
+			for _, msg := range h.processReqList() {
+				client.resCh <- *msg
+			}
 			log.Println("New connection from", client.conn.RemoteAddr())
 		case client := <-h.rmCh:
 			close(client.resCh)
