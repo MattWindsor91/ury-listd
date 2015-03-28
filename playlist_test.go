@@ -75,6 +75,25 @@ func TestEnqueue(t *testing.T) {
 			},
 			true,
 		},
+		// Test selection adjustment
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"iamlorde.m4a", "ya", true},
+				},
+				0,
+			},
+			&PlaylistItem{"iamsparticus.flac", "hurr", true},
+			0,
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"iamsparticus.flac", "hurr", true},
+					&PlaylistItem{"iamlorde.m4a", "ya", true},
+				},
+				1, // Selection should have been adjusted, we enqueued before the selection
+			},
+			false,
+		},
 	}
 
 	for caseno, c := range cases {
@@ -100,13 +119,13 @@ func TestDequeue(t *testing.T) {
 		want        *Playlist
 		shoulderror bool
 	}{
-		// Test dequeue
+		// Test dequeue. NB, selection should reset to -1
 		{
 			&Playlist{
 				[]*PlaylistItem{
 					&PlaylistItem{"darude - sandstorm.avi", "a1", true},
 				},
-				-1,
+				0,
 			},
 			0,
 			"a1",
@@ -186,6 +205,25 @@ func TestDequeue(t *testing.T) {
 				-1,
 			},
 			true,
+		},
+		// Test selection adjustment
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"a_walk_in_the_black_forest.ogg", "a1", true},
+					&PlaylistItem{"cactus_in_my_yfronts.mid", "b2", true},
+				},
+				1,
+			},
+			0,
+			"a1",
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"cactus_in_my_yfronts.mid", "b2", true},
+				},
+				0,
+			},
+			false,
 		},
 	}
 
