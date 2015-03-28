@@ -20,8 +20,7 @@ type hub struct {
 	clients map[*Client]bool
 
 	// Dump state from the downstream service (playd)
-	downstreamVersion  string
-	downstreamFeatures baps3.FeatureSet
+	downstreamState baps3.ServiceState
 
 	// Playlist instance
 	pl *Playlist
@@ -58,13 +57,13 @@ func (h *hub) handleNewConnection(conn net.Conn) {
 
 // Appends the downstream service's version (from the OHAI) to the listd version.
 func (h *hub) makeRsOhai() *baps3.Message {
-	return baps3.NewMessage(baps3.RsOhai).AddArg("listd " + LD_VERSION + "/" + h.downstreamVersion)
+	return baps3.NewMessage(baps3.RsOhai).AddArg("listd " + LD_VERSION + "/" + h.downstreamState.Identifier)
 }
 
 // Crafts the features message by adding listd's features to the downstream service's and removing
 // features listd intercepts.
 func (h *hub) makeRsFeatures() (msg *baps3.Message) {
-	features := h.downstreamFeatures
+	features := h.downstreamState.Features
 	features.DelFeature(baps3.FtFileLoad) // 'Mask' the features listd intercepts
 	features.AddFeature(baps3.FtPlaylist)
 	features.AddFeature(baps3.FtPlaylistTextItems)
@@ -208,17 +207,15 @@ func (h *hub) processRequest(c *Client, req baps3.Message) {
 
 // Processes a response from the downstream service.
 func (h *hub) processResponse(res baps3.Message) {
-	// TODO: Do something else
 	log.Println("New response:", res.String())
 	switch res.Word() {
-	case baps3.RsOhai:
-		h.downstreamVersion, _ = res.Arg(0)
-	case baps3.RsFeatures:
-		fs, err := baps3.FeatureSetFromMsg(&res)
-		if err != nil {
-			log.Fatal("Error reading features: " + err.Error())
+	case baps3.RsTime, baps3.RsState: // Broadcast _AND_ update state
+		h.broadcast(res)
+		fallthrough
+	case baps3.RsOhai, baps3.RsFeatures: // Just update state
+		if err := h.downstreamState.Update(res); err != nil {
+			log.Fatal("Error updating state: " + err.Error())
 		}
-		h.downstreamFeatures = fs
 	default:
 		h.broadcast(res)
 	}
