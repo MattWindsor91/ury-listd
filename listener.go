@@ -19,7 +19,7 @@ type hub struct {
 	// All current clients.
 	clients map[*Client]bool
 
-	// Dump state from the downstream service (playd)
+	// Downstream service state
 	downstreamState baps3.ServiceState
 
 	// Playlist instance
@@ -68,6 +68,34 @@ func (h *hub) makeRsFeatures() (msg *baps3.Message) {
 	features.AddFeature(baps3.FtPlaylist)
 	features.AddFeature(baps3.FtPlaylistTextItems)
 	msg = features.ToMessage()
+	return
+}
+
+// Collates all the responses that comprise a dump response.
+// Exists as this is used by the dump response handler /and/ is sent on client connection
+func (h *hub) makeDumpResponses() (msgs []*baps3.Message) {
+	msgs = append(msgs, baps3.NewMessage(baps3.RsState).AddArg(h.downstreamState.State.String()))
+	if h.downstreamState.State != baps3.StEjected {
+		msgs = append(msgs, baps3.NewMessage(baps3.RsTime).AddArg(
+			strconv.FormatInt(h.downstreamState.Time.Nanoseconds()/1000, 10)))
+	}
+	for _, m := range h.makeListResponses() {
+		msgs = append(msgs, m)
+	}
+	return
+}
+
+// Collates all the responses that comprise a list reponse.
+// Exists as this is used by the list response handler and makeDumpResponse.
+func (h *hub) makeListResponses() (msgs []*baps3.Message) {
+	msgs = append(msgs, baps3.NewMessage(baps3.RsCount).AddArg(strconv.Itoa(len(h.pl.items))))
+	for i, item := range h.pl.items {
+		typeStr := "file"
+		if !item.IsFile {
+			typeStr = "text"
+		}
+		msgs = append(msgs, baps3.NewMessage(baps3.RsItem).AddArg(strconv.Itoa(i)).AddArg(item.Hash).AddArg(typeStr).AddArg(item.Data))
+	}
 	return
 }
 
@@ -153,14 +181,7 @@ func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
 }
 
 func (h *hub) processReqList(req baps3.Message) (resps []*baps3.Message) {
-	resps = append(resps, baps3.NewMessage(baps3.RsCount).AddArg(strconv.Itoa(len(pl.items))))
-	for i, item := range pl.items {
-		typeStr := "file"
-		if !item.IsFile {
-			typeStr = "text"
-		}
-		resps = append(resps, baps3.NewMessage(baps3.RsItem).AddArg(strconv.Itoa(i)).AddArg(item.Hash).AddArg(typeStr).AddArg(item.Data))
-	}
+	resps = h.makeListResponses()
 	return
 }
 
@@ -169,11 +190,7 @@ func (h *hub) processReqLoadEject(req baps3.Message) (resps []*baps3.Message) {
 }
 
 func (h *hub) processReqDump(req baps3.Message) (msgs []*baps3.Message) {
-	msgs = append(msgs, baps3.NewMessage(baps3.RsState).AddArg(h.downstreamState.State.String()))
-	if h.downstreamState.State != baps3.StEjected {
-		msgs = append(msgs, baps3.NewMessage(baps3.RsTime).AddArg(
-			strconv.FormatInt(h.downstreamState.Time.Nanoseconds()/1000, 10)))
-	}
+	msgs = h.makeDumpResponses()
 	return
 }
 
@@ -269,10 +286,7 @@ func (h *hub) runListener(addr string, port string) {
 			h.clients[client] = true
 			client.resCh <- *h.makeRsOhai()
 			client.resCh <- *h.makeRsFeatures()
-			for _, msg := range h.processReqDump() {
-				client.resCh <- *msg
-			}
-			for _, msg := range h.processReqList() {
+			for _, msg := range h.makeDumpResponses() {
 				client.resCh <- *msg
 			}
 			log.Println("New connection from", client.conn.RemoteAddr())
