@@ -80,7 +80,7 @@ func (pl *Playlist) Len() int {
 }
 
 func (pl *Playlist) HasSelection() bool {
-	return pl.selection >= 0 && pl.selection < pl.Len()
+	return pl.selection >= 0
 }
 
 func (pl *Playlist) insert(i int, item *PlaylistItem) {
@@ -96,6 +96,7 @@ func (pl *Playlist) remove(i int) {
 }
 
 func (pl *Playlist) changeSelection(wasEnqueue bool, index int) {
+	// If there's no selection, nothing changes. use a select request to change it
 	if !pl.HasSelection() {
 		return
 	}
