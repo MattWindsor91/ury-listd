@@ -19,9 +19,8 @@ type hub struct {
 	// All current clients.
 	clients map[*Client]bool
 
-	// Dump state from the downstream service (playd)
-	downstreamVersion  string
-	downstreamFeatures baps3.FeatureSet
+	// Downstream service state
+	downstreamState baps3.ServiceState
 
 	// Playlist instance
 	pl *Playlist
@@ -57,18 +56,44 @@ func (h *hub) handleNewConnection(conn net.Conn) {
 }
 
 // Appends the downstream service's version (from the OHAI) to the listd version.
-func (h *hub) makeWelcomeMsg() *baps3.Message {
-	return baps3.NewMessage(baps3.RsOhai).AddArg("listd " + LD_VERSION + "/" + h.downstreamVersion)
+func (h *hub) makeRsOhai() *baps3.Message {
+	return baps3.NewMessage(baps3.RsOhai).AddArg("listd " + LD_VERSION + "/" + h.downstreamState.Identifier)
 }
 
 // Crafts the features message by adding listd's features to the downstream service's and removing
 // features listd intercepts.
-func (h *hub) makeFeaturesMsg() (msg *baps3.Message) {
-	features := h.downstreamFeatures
+func (h *hub) makeRsFeatures() (msg *baps3.Message) {
+	features := h.downstreamState.Features
 	features.DelFeature(baps3.FtFileLoad) // 'Mask' the features listd intercepts
 	features.AddFeature(baps3.FtPlaylist)
 	features.AddFeature(baps3.FtPlaylistTextItems)
 	msg = features.ToMessage()
+	return
+}
+
+// Collates all the responses that comprise a dump response.
+// Exists as this is used by the dump response handler /and/ is sent on client connection
+func (h *hub) makeDumpResponses() (msgs []*baps3.Message) {
+	msgs = append(msgs, baps3.NewMessage(baps3.RsState).AddArg(h.downstreamState.State.String()))
+	if h.downstreamState.State != baps3.StEjected {
+		msgs = append(msgs, baps3.NewMessage(baps3.RsTime).AddArg(
+			strconv.FormatInt(h.downstreamState.Time.Nanoseconds()/1000, 10)))
+	}
+	msgs = append(msgs, h.makeListResponses()...)
+	return
+}
+
+// Collates all the responses that comprise a list reponse.
+// Exists as this is used by the list response handler and makeDumpResponse.
+func (h *hub) makeListResponses() (msgs []*baps3.Message) {
+	msgs = append(msgs, baps3.NewMessage(baps3.RsCount).AddArg(strconv.Itoa(len(h.pl.items))))
+	for i, item := range h.pl.items {
+		typeStr := "file"
+		if !item.IsFile {
+			typeStr = "text"
+		}
+		msgs = append(msgs, baps3.NewMessage(baps3.RsItem).AddArg(strconv.Itoa(i)).AddArg(item.Hash).AddArg(typeStr).AddArg(item.Data))
+	}
 	return
 }
 
@@ -79,7 +104,7 @@ func sendInvalidCmd(c *Client, errRes baps3.Message, oldCmd baps3.Message) {
 	c.resCh <- errRes
 }
 
-func processReqDequeue(pl *Playlist, req baps3.Message) (resps []*baps3.Message) {
+func (h *hub) processReqDequeue(req baps3.Message) (resps []*baps3.Message) {
 	args := req.AsSlice()[1:]
 	if len(args) != 2 {
 		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
@@ -91,14 +116,14 @@ func processReqDequeue(pl *Playlist, req baps3.Message) (resps []*baps3.Message)
 		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad index"))
 	}
 
-	rmIdx, rmHash, err := pl.Dequeue(i, hash)
+	rmIdx, rmHash, err := h.pl.Dequeue(i, hash)
 	if err != nil {
 		return append(resps, baps3.NewMessage(baps3.RsFail).AddArg(err.Error()))
 	}
 	return append(resps, baps3.NewMessage(baps3.RsDequeue).AddArg(strconv.Itoa(rmIdx)).AddArg(rmHash))
 }
 
-func processReqEnqueue(pl *Playlist, req baps3.Message) (resps []*baps3.Message) {
+func (h *hub) processReqEnqueue(req baps3.Message) (resps []*baps3.Message) {
 	args := req.AsSlice()[1:]
 	if len(args) != 4 {
 		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
@@ -115,19 +140,19 @@ func processReqEnqueue(pl *Playlist, req baps3.Message) (resps []*baps3.Message)
 	}
 
 	item := &PlaylistItem{Data: data, Hash: hash, IsFile: itemType == "file"}
-	newIdx, err := pl.Enqueue(i, item)
+	newIdx, err := h.pl.Enqueue(i, item)
 	if err != nil {
 		return append(resps, baps3.NewMessage(baps3.RsFail).AddArg(err.Error()))
 	}
 	return append(resps, baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(item.Data))
 }
 
-func processReqSelect(pl *Playlist, req baps3.Message) (resps []*baps3.Message) {
+func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
 	args := req.AsSlice()[1:]
 	if len(args) == 0 {
-		if pl.HasSelection() {
+		if h.pl.HasSelection() {
 			// Remove current selection
-			pl.selection = -1
+			h.pl.selection = -1
 			resps = append(resps, baps3.NewMessage(baps3.RsSelect))
 		} else {
 			// TODO: Should we care about there not being an existing selection?
@@ -141,7 +166,7 @@ func processReqSelect(pl *Playlist, req baps3.Message) (resps []*baps3.Message) 
 			return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad index"))
 		}
 
-		newIdx, newHash, err := pl.Select(i, hash)
+		newIdx, newHash, err := h.pl.Select(i, hash)
 		if err != nil {
 			return append(resps, baps3.NewMessage(baps3.RsFail).AddArg(err.Error()))
 		}
@@ -153,29 +178,28 @@ func processReqSelect(pl *Playlist, req baps3.Message) (resps []*baps3.Message) 
 	return
 }
 
-func processReqList(pl *Playlist, req baps3.Message) (resps []*baps3.Message) {
-	resps = append(resps, baps3.NewMessage(baps3.RsCount).AddArg(strconv.Itoa(len(pl.items))))
-	for i, item := range pl.items {
-		typeStr := "file"
-		if !item.IsFile {
-			typeStr = "text"
-		}
-		resps = append(resps, baps3.NewMessage(baps3.RsItem).AddArg(strconv.Itoa(i)).AddArg(item.Hash).AddArg(typeStr).AddArg(item.Data))
-	}
+func (h *hub) processReqList(req baps3.Message) (resps []*baps3.Message) {
+	resps = h.makeListResponses()
 	return
 }
 
-func processReqLoadEject(pl *Playlist, req baps3.Message) (resps []*baps3.Message) {
+func (h *hub) processReqLoadEject(req baps3.Message) (resps []*baps3.Message) {
 	return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
 }
 
-var REQ_FUNC_MAP = map[baps3.MessageWord]func(*Playlist, baps3.Message) []*baps3.Message{
-	baps3.RqEnqueue: processReqEnqueue,
-	baps3.RqDequeue: processReqDequeue,
-	baps3.RqSelect:  processReqSelect,
-	baps3.RqList:    processReqList,
-	baps3.RqLoad:    processReqLoadEject,
-	baps3.RqEject:   processReqLoadEject,
+func (h *hub) processReqDump(req baps3.Message) (msgs []*baps3.Message) {
+	msgs = h.makeDumpResponses()
+	return
+}
+
+var REQ_FUNC_MAP = map[baps3.MessageWord]func(*hub, baps3.Message) []*baps3.Message{
+	baps3.RqEnqueue: (*hub).processReqEnqueue,
+	baps3.RqDequeue: (*hub).processReqDequeue,
+	baps3.RqSelect:  (*hub).processReqSelect,
+	baps3.RqList:    (*hub).processReqList,
+	baps3.RqLoad:    (*hub).processReqLoadEject,
+	baps3.RqEject:   (*hub).processReqLoadEject,
+	baps3.RqDump:    (*hub).processReqDump,
 }
 
 // Handles a request from a client.
@@ -183,7 +207,7 @@ var REQ_FUNC_MAP = map[baps3.MessageWord]func(*Playlist, baps3.Message) []*baps3
 func (h *hub) processRequest(c *Client, req baps3.Message) {
 	log.Println("New request:", req.String())
 	if reqFunc, ok := REQ_FUNC_MAP[req.Word()]; ok {
-		responses := reqFunc(h.pl, req)
+		responses := reqFunc(h, req)
 		// Of course one of them is special...
 		if req.Word() == baps3.RqSelect {
 			if h.pl.HasSelection() {
@@ -208,17 +232,15 @@ func (h *hub) processRequest(c *Client, req baps3.Message) {
 
 // Processes a response from the downstream service.
 func (h *hub) processResponse(res baps3.Message) {
-	// TODO: Do something else
 	log.Println("New response:", res.String())
 	switch res.Word() {
-	case baps3.RsOhai:
-		h.downstreamVersion, _ = res.Arg(0)
-	case baps3.RsFeatures:
-		fs, err := baps3.FeatureSetFromMsg(&res)
-		if err != nil {
-			log.Fatal("Error reading features: " + err.Error())
+	case baps3.RsTime, baps3.RsState: // Broadcast _AND_ update state
+		h.broadcast(res)
+		fallthrough
+	case baps3.RsOhai, baps3.RsFeatures: // Just update state
+		if err := h.downstreamState.Update(res); err != nil {
+			log.Fatal("Error updating state: " + err.Error())
 		}
-		h.downstreamFeatures = fs
 	default:
 		h.broadcast(res)
 	}
@@ -260,8 +282,11 @@ func (h *hub) runListener(addr string, port string) {
 			h.processRequest(data.c, data.msg)
 		case client := <-h.addCh:
 			h.clients[client] = true
-			client.resCh <- *h.makeWelcomeMsg()
-			client.resCh <- *h.makeFeaturesMsg()
+			client.resCh <- *h.makeRsOhai()
+			client.resCh <- *h.makeRsFeatures()
+			for _, msg := range h.makeDumpResponses() {
+				client.resCh <- *msg
+			}
 			log.Println("New connection from", client.conn.RemoteAddr())
 		case client := <-h.rmCh:
 			close(client.resCh)

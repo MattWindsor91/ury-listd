@@ -53,7 +53,7 @@ func main() {
 	var h = hub{
 		clients: make(map[*Client]bool),
 
-		downstreamFeatures: make(baps3.FeatureSet),
+		downstreamState: *baps3.InitServiceState(),
 
 		pl: InitPlaylist(),
 
