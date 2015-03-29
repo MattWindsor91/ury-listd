@@ -37,6 +37,7 @@ func (pl *Playlist) Enqueue(idx int, item *PlaylistItem) (newIdx int, err error)
 	}
 	pl.insert(idx, item)
 	newIdx = idx
+	pl.changeSelection(true, newIdx)
 	// TODO: confirm has been added at idx?
 	return
 }
@@ -51,6 +52,7 @@ func (pl *Playlist) Dequeue(idx int, hash string) (oldIdx int, oldHash string, e
 	}
 	oldIdx, oldHash = idx, pl.items[idx].Hash
 	pl.remove(idx)
+	pl.changeSelection(false, oldIdx)
 	return
 }
 
@@ -91,6 +93,24 @@ func (pl *Playlist) insert(i int, item *PlaylistItem) {
 func (pl *Playlist) remove(i int) {
 	// i must be valid index
 	pl.items[len(pl.items)-1], pl.items = nil, append(pl.items[:i], pl.items[i+1:]...)
+}
+
+func (pl *Playlist) changeSelection(wasEnqueue bool, index int) {
+	if !pl.HasSelection() {
+		return
+	}
+
+	if wasEnqueue {
+		if index <= pl.selection {
+			pl.selection += 1
+		}
+	} else {
+		if index == pl.selection {
+			pl.selection = -1 // Remove selection
+		} else if index < pl.selection {
+			pl.selection -= 1
+		}
+	}
 }
 
 func (pl *Playlist) resolveIndex(idx int, length int) (resolved int, err error) {
