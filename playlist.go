@@ -77,6 +77,10 @@ func (pl *Playlist) Len() int {
 	return len(pl.items)
 }
 
+func (pl *Playlist) HasSelection() bool {
+	return pl.selection >= 0 && pl.selection < pl.Len()
+}
+
 func (pl *Playlist) insert(i int, item *PlaylistItem) {
 	// i must be valid index
 	pl.items = append(pl.items, nil)

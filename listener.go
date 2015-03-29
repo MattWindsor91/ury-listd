@@ -79,133 +79,129 @@ func sendInvalidCmd(c *Client, errRes baps3.Message, oldCmd baps3.Message) {
 	c.resCh <- errRes
 }
 
-func processReqDequeue(pl *Playlist, req baps3.Message) *baps3.Message {
+func processReqDequeue(pl *Playlist, req baps3.Message) (resps []*baps3.Message) {
 	args := req.AsSlice()[1:]
 	if len(args) != 2 {
-		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad command")
+		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
 	}
 	iStr, hash := args[0], args[1]
 
 	i, err := strconv.Atoi(iStr)
 	if err != nil {
-		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad index")
+		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad index"))
 	}
 
 	rmIdx, rmHash, err := pl.Dequeue(i, hash)
 	if err != nil {
-		return baps3.NewMessage(baps3.RsFail).AddArg(err.Error())
+		return append(resps, baps3.NewMessage(baps3.RsFail).AddArg(err.Error()))
 	}
-	return baps3.NewMessage(baps3.RsDequeue).AddArg(strconv.Itoa(rmIdx)).AddArg(rmHash)
+	return append(resps, baps3.NewMessage(baps3.RsDequeue).AddArg(strconv.Itoa(rmIdx)).AddArg(rmHash))
 }
 
-func processReqEnqueue(pl *Playlist, req baps3.Message) *baps3.Message {
+func processReqEnqueue(pl *Playlist, req baps3.Message) (resps []*baps3.Message) {
 	args := req.AsSlice()[1:]
 	if len(args) != 4 {
-		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad command")
+		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
 	}
 	iStr, hash, itemType, data := args[0], args[1], args[2], args[3]
 
 	i, err := strconv.Atoi(iStr)
 	if err != nil {
-		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad index")
+		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad index"))
 	}
 
 	if itemType != "file" && itemType != "text" {
-		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad item type")
+		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad item type"))
 	}
 
 	item := &PlaylistItem{Data: data, Hash: hash, IsFile: itemType == "file"}
 	newIdx, err := pl.Enqueue(i, item)
 	if err != nil {
-		return baps3.NewMessage(baps3.RsFail).AddArg(err.Error())
+		return append(resps, baps3.NewMessage(baps3.RsFail).AddArg(err.Error()))
 	}
-	return baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(item.Data)
+	return append(resps, baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(item.Data))
 }
 
-func processReqSelect(pl *Playlist, req baps3.Message) *baps3.Message {
+func processReqSelect(pl *Playlist, req baps3.Message) (resps []*baps3.Message) {
 	args := req.AsSlice()[1:]
 	if len(args) == 0 {
-		// TODO: Should we care about there not being an existing selection?
-		// TODO: Move this logic to playlist.go?
-		if pl.selection < 0 {
-			return baps3.NewMessage(baps3.RsFail).AddArg("No selection to remove")
+		if pl.HasSelection() {
+			// Remove current selection
+			pl.selection = -1
+			resps = append(resps, baps3.NewMessage(baps3.RsSelect))
+		} else {
+			// TODO: Should we care about there not being an existing selection?
+			resps = append(resps, baps3.NewMessage(baps3.RsFail).AddArg("No selection to remove"))
 		}
-		pl.selection = -1
-		return baps3.NewMessage(baps3.RsSelect)
-
 	} else if len(args) == 2 {
 		iStr, hash := args[0], args[1]
 
 		i, err := strconv.Atoi(iStr)
 		if err != nil {
-			return baps3.NewMessage(baps3.RsWhat).AddArg("Bad index")
+			return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad index"))
 		}
 
 		newIdx, newHash, err := pl.Select(i, hash)
 		if err != nil {
-			return baps3.NewMessage(baps3.RsFail).AddArg(err.Error())
+			return append(resps, baps3.NewMessage(baps3.RsFail).AddArg(err.Error()))
 		}
 
-		return baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(newIdx)).AddArg(newHash)
+		resps = append(resps, baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(newIdx)).AddArg(newHash))
 	} else {
-		return baps3.NewMessage(baps3.RsWhat).AddArg("Bad command")
+		resps = append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
 	}
+	return
 }
 
-func (h *hub) processReqList() {
-	h.broadcast(*baps3.NewMessage(baps3.RsCount).AddArg(strconv.Itoa(len(h.pl.items))))
-	for i, item := range h.pl.items {
+func processReqList(pl *Playlist, req baps3.Message) (resps []*baps3.Message) {
+	resps = append(resps, baps3.NewMessage(baps3.RsCount).AddArg(strconv.Itoa(len(pl.items))))
+	for i, item := range pl.items {
 		typeStr := "file"
 		if !item.IsFile {
 			typeStr = "text"
 		}
-		h.broadcast(*baps3.NewMessage(baps3.RsItem).AddArg(strconv.Itoa(i)).AddArg(item.Hash).AddArg(typeStr).AddArg(item.Data))
+		resps = append(resps, baps3.NewMessage(baps3.RsItem).AddArg(strconv.Itoa(i)).AddArg(item.Hash).AddArg(typeStr).AddArg(item.Data))
 	}
+	return
+}
+
+func processReqLoadEject(pl *Playlist, req baps3.Message) (resps []*baps3.Message) {
+	return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
+}
+
+var REQ_FUNC_MAP = map[baps3.MessageWord]func(*Playlist, baps3.Message) []*baps3.Message{
+	baps3.RqEnqueue: processReqEnqueue,
+	baps3.RqDequeue: processReqDequeue,
+	baps3.RqSelect:  processReqSelect,
+	baps3.RqList:    processReqList,
+	baps3.RqLoad:    processReqLoadEject,
+	baps3.RqEject:   processReqLoadEject,
 }
 
 // Handles a request from a client.
 // Falls through to the connector cReqCh if command is "not understood".
 func (h *hub) processRequest(c *Client, req baps3.Message) {
 	log.Println("New request:", req.String())
-	switch req.Word() {
-	case baps3.RqEnqueue:
-		resp := processReqEnqueue(h.pl, req)
-		// TODO: Add a "is fail word" func to baps3-go?
-		if resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
-			// failures only go to sender
-			sendInvalidCmd(c, *resp, req)
-		} else {
-			h.broadcast(*resp)
-		}
-	case baps3.RqDequeue:
-		// TODO: Eep, such code duplication
-		resp := processReqDequeue(h.pl, req)
-		if resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
-			sendInvalidCmd(c, *resp, req)
-		} else {
-			h.broadcast(*resp)
-		}
-
-	case baps3.RqList:
-		h.processReqList()
-
-	case baps3.RqSelect:
-		resp := processReqSelect(h.pl, req)
-		if resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
-			sendInvalidCmd(c, *resp, req)
-		} else {
-			if h.pl.selection >= 0 {
+	if reqFunc, ok := REQ_FUNC_MAP[req.Word()]; ok {
+		responses := reqFunc(h.pl, req)
+		// Of course one of them is special...
+		if req.Word() == baps3.RqSelect {
+			if h.pl.HasSelection() {
 				h.cReqCh <- *baps3.NewMessage(baps3.RqLoad).AddArg(h.pl.items[h.pl.selection].Data)
 			} else {
 				h.cReqCh <- *baps3.NewMessage(baps3.RqEject)
 			}
-			h.broadcast(*resp)
 		}
-
-	case baps3.RqLoad:
-	case baps3.RqEject:
-		h.broadcast(*baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
-	default:
+		for _, resp := range responses {
+			// TODO: Add a "is fail word" func to baps3-go?
+			if resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
+				// failures only go to sender
+				sendInvalidCmd(c, *resp, req)
+			} else {
+				h.broadcast(*resp)
+			}
+		}
+	} else {
 		h.cReqCh <- req
 	}
 }
