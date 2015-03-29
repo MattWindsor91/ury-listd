@@ -237,7 +237,7 @@ func TestDequeue(t *testing.T) {
 			}
 		}
 		if !reflect.DeepEqual(c.before, c.want) {
-			t.Errorf("TestDequeue: %q != %q", c.before, c.want)
+			t.Errorf("TestDequeue: (case %d) %q != %q", caseno, c.before, c.want)
 		}
 	}
 }

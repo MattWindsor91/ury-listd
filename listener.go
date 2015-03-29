@@ -116,9 +116,17 @@ func (h *hub) processReqDequeue(req baps3.Message) (resps []*baps3.Message) {
 		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad index"))
 	}
 
+	oldSelection := h.pl.selection
 	rmIdx, rmHash, err := h.pl.Dequeue(i, hash)
 	if err != nil {
 		return append(resps, baps3.NewMessage(baps3.RsFail).AddArg(err.Error()))
+	}
+	if oldSelection != h.pl.selection {
+		if !h.pl.HasSelection() {
+			resps = append(resps, baps3.NewMessage(baps3.RsSelect))
+		} else {
+			resps = append(resps, baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(h.pl.selection)).AddArg(h.pl.items[h.pl.selection].Hash))
+		}
 	}
 	return append(resps, baps3.NewMessage(baps3.RsDequeue).AddArg(strconv.Itoa(rmIdx)).AddArg(rmHash))
 }
@@ -139,10 +147,14 @@ func (h *hub) processReqEnqueue(req baps3.Message) (resps []*baps3.Message) {
 		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad item type"))
 	}
 
+	oldSelection := h.pl.selection
 	item := &PlaylistItem{Data: data, Hash: hash, IsFile: itemType == "file"}
 	newIdx, err := h.pl.Enqueue(i, item)
 	if err != nil {
 		return append(resps, baps3.NewMessage(baps3.RsFail).AddArg(err.Error()))
+	}
+	if oldSelection != h.pl.selection {
+		resps = append(resps, baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(h.pl.selection)).AddArg(h.pl.items[h.pl.selection].Hash))
 	}
 	return append(resps, baps3.NewMessage(baps3.RsEnqueue).AddArg(strconv.Itoa(newIdx)).AddArg(item.Hash).AddArg(itemType).AddArg(item.Data))
 }
