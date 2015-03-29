@@ -79,9 +79,7 @@ func (h *hub) makeDumpResponses() (msgs []*baps3.Message) {
 		msgs = append(msgs, baps3.NewMessage(baps3.RsTime).AddArg(
 			strconv.FormatInt(h.downstreamState.Time.Nanoseconds()/1000, 10)))
 	}
-	for _, m := range h.makeListResponses() {
-		msgs = append(msgs, m)
-	}
+	msgs = append(msgs, h.makeListResponses()...)
 	return
 }
 
