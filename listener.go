@@ -169,8 +169,8 @@ func processReqLoadEject(pl *Playlist, req baps3.Message) (resps []*baps3.Messag
 }
 
 func (h *hub) processReqDump() (msgs []*baps3.Message) {
-	msgs = append(msgs, baps3.NewMessage(baps3.RsState).AddArg(h.downstreamState.State))
-	if h.downstreamState.State != "Ejected" {
+	msgs = append(msgs, baps3.NewMessage(baps3.RsState).AddArg(h.downstreamState.State.String()))
+	if h.downstreamState.State != baps3.StEjected {
 		msgs = append(msgs, baps3.NewMessage(baps3.RsTime).AddArg(
 			strconv.FormatInt(h.downstreamState.Time.Nanoseconds()/1000, 10)))
 	}
