@@ -105,11 +105,10 @@ func sendInvalidCmd(c *Client, errRes baps3.Message, oldCmd baps3.Message) {
 }
 
 func (h *hub) processReqDequeue(req baps3.Message) (resps []*baps3.Message) {
-	args := req.AsSlice()[1:]
-	if len(args) != 2 {
+	if len(req.Args()) != 2 {
 		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
 	}
-	iStr, hash := args[0], args[1]
+	iStr, hash := req.Args()[0], req.Args()[1]
 
 	i, err := strconv.Atoi(iStr)
 	if err != nil {
@@ -132,7 +131,7 @@ func (h *hub) processReqDequeue(req baps3.Message) (resps []*baps3.Message) {
 }
 
 func (h *hub) processReqEnqueue(req baps3.Message) (resps []*baps3.Message) {
-	args := req.AsSlice()[1:]
+	args := req.Args()
 	if len(args) != 4 {
 		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
 	}
@@ -160,8 +159,7 @@ func (h *hub) processReqEnqueue(req baps3.Message) (resps []*baps3.Message) {
 }
 
 func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
-	args := req.AsSlice()[1:]
-	if len(args) == 0 {
+	if len(req.Args()) == 0 {
 		if h.pl.HasSelection() {
 			// Remove current selection
 			h.pl.selection = -1
@@ -170,8 +168,8 @@ func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
 			// TODO: Should we care about there not being an existing selection?
 			resps = append(resps, baps3.NewMessage(baps3.RsFail).AddArg("No selection to remove"))
 		}
-	} else if len(args) == 2 {
-		iStr, hash := args[0], args[1]
+	} else if len(req.Args()) == 2 {
+		iStr, hash := req.Args()[0], req.Args()[1]
 
 		i, err := strconv.Atoi(iStr)
 		if err != nil {
