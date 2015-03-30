@@ -162,6 +162,7 @@ func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
 	if len(req.Args()) == 0 {
 		if h.pl.HasSelection() {
 			// Remove current selection
+			h.cReqCh <- *baps3.NewMessage(baps3.RqEject)
 			h.pl.selection = -1
 			resps = append(resps, baps3.NewMessage(baps3.RsSelect))
 		} else {
@@ -181,6 +182,7 @@ func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
 			return append(resps, baps3.NewMessage(baps3.RsFail).AddArg(err.Error()))
 		}
 
+		h.cReqCh <- *baps3.NewMessage(baps3.RqLoad).AddArg(h.pl.items[h.pl.selection].Data)
 		resps = append(resps, baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(newIdx)).AddArg(newHash))
 	} else {
 		resps = append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
@@ -218,14 +220,6 @@ func (h *hub) processRequest(c *Client, req baps3.Message) {
 	log.Println("New request:", req.String())
 	if reqFunc, ok := REQ_FUNC_MAP[req.Word()]; ok {
 		responses := reqFunc(h, req)
-		// Of course one of them is special...
-		if req.Word() == baps3.RqSelect {
-			if h.pl.HasSelection() {
-				h.cReqCh <- *baps3.NewMessage(baps3.RqLoad).AddArg(h.pl.items[h.pl.selection].Data)
-			} else {
-				h.cReqCh <- *baps3.NewMessage(baps3.RqEject)
-			}
-		}
 		for _, resp := range responses {
 			// TODO: Add a "is fail word" func to baps3-go?
 			if resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
