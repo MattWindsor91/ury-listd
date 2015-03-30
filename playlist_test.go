@@ -363,3 +363,110 @@ func TestSelect(t *testing.T) {
 		}
 	}
 }
+
+func TestAdvance(t *testing.T) {
+	cases := []struct {
+		before *Playlist
+		want   *Playlist
+	}{
+		// Test advance on empty selection
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"rasputin.mp3", "aaa", true},
+					&PlaylistItem{"mabaker.mp3", "bbb", true},
+				},
+				-1,
+			},
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"rasputin.mp3", "aaa", true},
+					&PlaylistItem{"mabaker.mp3", "bbb", true},
+				},
+				-1,
+			},
+		},
+		// Test advance
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"rasputin.mp3", "aaa", true},
+					&PlaylistItem{"mabaker.mp3", "bbb", true},
+				},
+				0,
+			},
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"rasputin.mp3", "aaa", true},
+					&PlaylistItem{"mabaker.mp3", "bbb", true},
+				},
+				1,
+			},
+		},
+		// Test advance on last item
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"rasputin.mp3", "aaa", true},
+					&PlaylistItem{"mabaker.mp3", "bbb", true},
+				},
+				1,
+			},
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"rasputin.mp3", "aaa", true},
+					&PlaylistItem{"mabaker.mp3", "bbb", true},
+				},
+				1,
+			},
+		},
+		// Test skipping of text items
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"rasputin.mp3", "aaa", true},
+					&PlaylistItem{"Note to self: play more boney m.", "plzno", false},
+					&PlaylistItem{"mabaker.mp3", "bbb", true},
+				},
+				0,
+			},
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"rasputin.mp3", "aaa", true},
+					&PlaylistItem{"Note to self: play more boney m.", "plzno", false},
+					&PlaylistItem{"mabaker.mp3", "bbb", true},
+				},
+				2,
+			},
+		},
+		// Test skipping of text items at end of playlist
+		{
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"rasputin.mp3", "aaa", true},
+					&PlaylistItem{"mabaker.mp3", "bbb", true},
+					&PlaylistItem{"Note to self: play more boney m.", "plzno", false},
+					&PlaylistItem{"Thomas dolby 4 lyf", "science", false},
+				},
+				1,
+			},
+			&Playlist{
+				[]*PlaylistItem{
+					&PlaylistItem{"rasputin.mp3", "aaa", true},
+					&PlaylistItem{"mabaker.mp3", "bbb", true},
+					&PlaylistItem{"Note to self: play more boney m.", "plzno", false},
+					&PlaylistItem{"Thomas dolby 4 lyf", "science", false},
+				},
+				1,
+			},
+		},
+	}
+
+	for _, c := range cases {
+		got := c.before
+		got.Advance()
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("TestAdvance: %q.Advance() == %q, want %q", c.before, got, c.want)
+		}
+	}
+}

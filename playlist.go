@@ -83,6 +83,21 @@ func (pl *Playlist) HasSelection() bool {
 	return pl.selection >= 0
 }
 
+// Advance selects the next File item in the playlist, if it exists
+func (pl *Playlist) Advance() bool {
+	if !pl.HasSelection() { // Don't advance if nothing selected
+		return false
+	}
+	for nowselected := pl.selection + 1; nowselected < len(pl.items); nowselected++ {
+		if pl.items[nowselected].IsFile {
+			pl.selection = nowselected
+			return true
+		}
+	}
+	//Dropped off bottom, no more file items in playlist
+	return false
+}
+
 func (pl *Playlist) insert(i int, item *PlaylistItem) {
 	// i must be valid index
 	pl.items = append(pl.items, nil)
