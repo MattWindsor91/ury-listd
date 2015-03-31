@@ -417,7 +417,7 @@ func TestAdvance(t *testing.T) {
 					&PlaylistItem{"rasputin.mp3", "aaa", true},
 					&PlaylistItem{"mabaker.mp3", "bbb", true},
 				},
-				1,
+				-1,
 			},
 		},
 		// Test skipping of text items
@@ -457,7 +457,7 @@ func TestAdvance(t *testing.T) {
 					&PlaylistItem{"Note to self: play more boney m.", "plzno", false},
 					&PlaylistItem{"Thomas dolby 4 lyf", "science", false},
 				},
-				1,
+				-1,
 			},
 		},
 	}
