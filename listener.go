@@ -22,7 +22,7 @@ type hub struct {
 	// Downstream service state
 	downstreamState baps3.ServiceState
 
-	Autoadvance bool
+	autoAdvance bool
 
 	// Playlist instance
 	pl *Playlist
@@ -76,7 +76,7 @@ func (h *hub) makeRsFeatures() (msg *baps3.Message) {
 
 func (h *hub) makeRsAutoadvance() (msg *baps3.Message) {
 	var autoadvancestate string
-	if h.Autoadvance {
+	if h.autoAdvance {
 		autoadvancestate = "on"
 	} else {
 		autoadvancestate = "off"
@@ -119,10 +119,11 @@ func sendInvalidCmd(c *Client, errRes baps3.Message, oldCmd baps3.Message) {
 }
 
 func (h *hub) processReqDequeue(req baps3.Message) (resps []*baps3.Message) {
-	if len(req.Args()) != 2 {
+	args := req.Args()
+	if len(args) != 2 {
 		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
 	}
-	iStr, hash := req.Args()[0], req.Args()[1]
+	iStr, hash := args[0], args[1]
 
 	i, err := strconv.Atoi(iStr)
 	if err != nil {
@@ -173,7 +174,8 @@ func (h *hub) processReqEnqueue(req baps3.Message) (resps []*baps3.Message) {
 }
 
 func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
-	if len(req.Args()) == 0 {
+	args := req.Args()
+	if len(args) == 0 {
 		if h.pl.HasSelection() {
 			// Remove current selection
 			h.cReqCh <- *baps3.NewMessage(baps3.RqEject)
@@ -183,8 +185,8 @@ func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
 			// TODO: Should we care about there not being an existing selection?
 			resps = append(resps, baps3.NewMessage(baps3.RsFail).AddArg("No selection to remove"))
 		}
-	} else if len(req.Args()) == 2 {
-		iStr, hash := req.Args()[0], req.Args()[1]
+	} else if len(args) == 2 {
+		iStr, hash := args[0], args[1]
 
 		i, err := strconv.Atoi(iStr)
 		if err != nil {
@@ -224,9 +226,9 @@ func (h *hub) processReqAutoadvance(req baps3.Message) (msgs []*baps3.Message) {
 	onoff, _ := req.Arg(0)
 	switch onoff {
 	case "on":
-		h.Autoadvance = true
+		h.autoAdvance = true
 	case "off":
-		h.Autoadvance = false
+		h.autoAdvance = false
 	default:
 		return append(msgs, baps3.NewMessage(baps3.RsWhat).AddArg("Bad argument"))
 	}
@@ -265,11 +267,9 @@ func (h *hub) processRequest(c *Client, req baps3.Message) {
 }
 
 func (h *hub) handleRsEnd(res baps3.Message) {
-	if h.Autoadvance {
-		if h.pl.Advance() { // Selection changed
-			h.cReqCh <- *baps3.NewMessage(baps3.RqLoad).AddArg(h.pl.items[h.pl.selection].Data)
-			h.broadcast(*baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(h.pl.selection)))
-		}
+	if h.autoAdvance && h.pl.Advance() { // Selection changed
+		h.cReqCh <- *baps3.NewMessage(baps3.RqLoad).AddArg(h.pl.items[h.pl.selection].Data)
+		h.broadcast(*baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(h.pl.selection)))
 	}
 }
 
