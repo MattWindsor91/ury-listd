@@ -74,7 +74,7 @@ func (h *hub) makeRsFeatures() (msg *baps3.Message) {
 	return
 }
 
-func (h *hub) makeRsAutoadvance() (msg *baps3.Message) {
+func (h *hub) makeRsAutoAdvance() (msg *baps3.Message) {
 	var autoadvancestate string
 	if h.autoAdvance {
 		autoadvancestate = "on"
@@ -92,7 +92,7 @@ func (h *hub) makeDumpResponses() (msgs []*baps3.Message) {
 		msgs = append(msgs, baps3.NewMessage(baps3.RsTime).AddArg(
 			strconv.FormatInt(h.downstreamState.Time.Nanoseconds()/1000, 10)))
 	}
-	msgs = append(msgs, h.makeRsAutoadvance())
+	msgs = append(msgs, h.makeRsAutoAdvance())
 	msgs = append(msgs, h.makeListResponses()...)
 	return
 }
@@ -232,7 +232,7 @@ func (h *hub) processReqAutoadvance(req baps3.Message) (msgs []*baps3.Message) {
 	default:
 		return append(msgs, baps3.NewMessage(baps3.RsWhat).AddArg("Bad argument"))
 	}
-	return append(msgs, h.makeRsAutoadvance())
+	return append(msgs, h.makeRsAutoAdvance())
 }
 
 var REQ_FUNC_MAP = map[baps3.MessageWord]func(*hub, baps3.Message) []*baps3.Message{
