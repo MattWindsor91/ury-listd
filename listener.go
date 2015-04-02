@@ -57,6 +57,14 @@ func (h *hub) handleNewConnection(conn net.Conn) {
 	client.Write(client.resCh, h.rmCh)
 }
 
+//
+// Request handler
+//
+
+func makeBadCommandMsgs() []*baps3.Message {
+	return []*baps3.Message{baps3.NewMessage(baps3.RsWhat).AddArg("Bad command")}
+}
+
 // Appends the downstream service's version (from the OHAI) to the listd version.
 func (h *hub) makeRsOhai() *baps3.Message {
 	return baps3.NewMessage(baps3.RsOhai).AddArg("listd " + LD_VERSION + "/" + h.downstreamState.Identifier)
@@ -121,7 +129,7 @@ func sendInvalidCmd(c *Client, errRes baps3.Message, oldCmd baps3.Message) {
 func (h *hub) processReqDequeue(req baps3.Message) (resps []*baps3.Message) {
 	args := req.Args()
 	if len(args) != 2 {
-		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
+		return makeBadCommandMsgs()
 	}
 	iStr, hash := args[0], args[1]
 
@@ -148,7 +156,7 @@ func (h *hub) processReqDequeue(req baps3.Message) (resps []*baps3.Message) {
 func (h *hub) processReqEnqueue(req baps3.Message) (resps []*baps3.Message) {
 	args := req.Args()
 	if len(args) != 4 {
-		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
+		return makeBadCommandMsgs()
 	}
 	iStr, hash, itemType, data := args[0], args[1], args[2], args[3]
 
@@ -201,7 +209,7 @@ func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
 		h.cReqCh <- *baps3.NewMessage(baps3.RqLoad).AddArg(h.pl.items[h.pl.selection].Data)
 		resps = append(resps, baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(newIdx)).AddArg(newHash))
 	} else {
-		resps = append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
+		resps = makeBadCommandMsgs()
 	}
 	return
 }
@@ -212,7 +220,7 @@ func (h *hub) processReqList(req baps3.Message) (resps []*baps3.Message) {
 }
 
 func (h *hub) processReqLoadEject(req baps3.Message) (resps []*baps3.Message) {
-	return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
+	return makeBadCommandMsgs()
 }
 
 func (h *hub) processReqDump(req baps3.Message) (msgs []*baps3.Message) {
@@ -221,7 +229,7 @@ func (h *hub) processReqDump(req baps3.Message) (msgs []*baps3.Message) {
 
 func (h *hub) processReqAutoadvance(req baps3.Message) (msgs []*baps3.Message) {
 	if len(req.Args()) != 1 {
-		return append(msgs, baps3.NewMessage(baps3.RsWhat).AddArg("Bad number of arguments"))
+		return makeBadCommandMsgs()
 	}
 	onoff, _ := req.Arg(0)
 	switch onoff {
@@ -265,6 +273,10 @@ func (h *hub) processRequest(c *Client, req baps3.Message) {
 		h.cReqCh <- req
 	}
 }
+
+//
+// Response handler
+//
 
 func (h *hub) handleRsEnd(res baps3.Message) {
 	if h.autoAdvance && h.pl.Advance() { // Selection changed
