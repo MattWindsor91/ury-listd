@@ -22,6 +22,8 @@ type hub struct {
 	// Downstream service state
 	downstreamState baps3.ServiceState
 
+	autoAdvance bool
+
 	// Playlist instance
 	pl *Playlist
 
@@ -67,8 +69,19 @@ func (h *hub) makeRsFeatures() (msg *baps3.Message) {
 	features.DelFeature(baps3.FtFileLoad) // 'Mask' the features listd intercepts
 	features.AddFeature(baps3.FtPlaylist)
 	features.AddFeature(baps3.FtPlaylistTextItems)
+	features.AddFeature(baps3.FtPlaylistAutoAdvance)
 	msg = features.ToMessage()
 	return
+}
+
+func (h *hub) makeRsAutoAdvance() (msg *baps3.Message) {
+	var autoadvancestate string
+	if h.autoAdvance {
+		autoadvancestate = "on"
+	} else {
+		autoadvancestate = "off"
+	}
+	return baps3.NewMessage(baps3.RsAutoAdvance).AddArg(autoadvancestate)
 }
 
 // Collates all the responses that comprise a dump response.
@@ -79,6 +92,7 @@ func (h *hub) makeDumpResponses() (msgs []*baps3.Message) {
 		msgs = append(msgs, baps3.NewMessage(baps3.RsTime).AddArg(
 			strconv.FormatInt(h.downstreamState.Time.Nanoseconds()/1000, 10)))
 	}
+	msgs = append(msgs, h.makeRsAutoAdvance())
 	msgs = append(msgs, h.makeListResponses()...)
 	return
 }
@@ -105,7 +119,7 @@ func sendInvalidCmd(c *Client, errRes baps3.Message, oldCmd baps3.Message) {
 }
 
 func (h *hub) processReqDequeue(req baps3.Message) (resps []*baps3.Message) {
-	args := req.AsSlice()[1:]
+	args := req.Args()
 	if len(args) != 2 {
 		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
 	}
@@ -132,7 +146,7 @@ func (h *hub) processReqDequeue(req baps3.Message) (resps []*baps3.Message) {
 }
 
 func (h *hub) processReqEnqueue(req baps3.Message) (resps []*baps3.Message) {
-	args := req.AsSlice()[1:]
+	args := req.Args()
 	if len(args) != 4 {
 		return append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
 	}
@@ -160,10 +174,11 @@ func (h *hub) processReqEnqueue(req baps3.Message) (resps []*baps3.Message) {
 }
 
 func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
-	args := req.AsSlice()[1:]
+	args := req.Args()
 	if len(args) == 0 {
 		if h.pl.HasSelection() {
 			// Remove current selection
+			h.cReqCh <- *baps3.NewMessage(baps3.RqEject)
 			h.pl.selection = -1
 			resps = append(resps, baps3.NewMessage(baps3.RsSelect))
 		} else {
@@ -183,6 +198,7 @@ func (h *hub) processReqSelect(req baps3.Message) (resps []*baps3.Message) {
 			return append(resps, baps3.NewMessage(baps3.RsFail).AddArg(err.Error()))
 		}
 
+		h.cReqCh <- *baps3.NewMessage(baps3.RqLoad).AddArg(h.pl.items[h.pl.selection].Data)
 		resps = append(resps, baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(newIdx)).AddArg(newHash))
 	} else {
 		resps = append(resps, baps3.NewMessage(baps3.RsWhat).AddArg("Bad command"))
@@ -200,18 +216,34 @@ func (h *hub) processReqLoadEject(req baps3.Message) (resps []*baps3.Message) {
 }
 
 func (h *hub) processReqDump(req baps3.Message) (msgs []*baps3.Message) {
-	msgs = h.makeDumpResponses()
-	return
+	return h.makeDumpResponses()
+}
+
+func (h *hub) processReqAutoadvance(req baps3.Message) (msgs []*baps3.Message) {
+	if len(req.Args()) != 1 {
+		return append(msgs, baps3.NewMessage(baps3.RsWhat).AddArg("Bad number of arguments"))
+	}
+	onoff, _ := req.Arg(0)
+	switch onoff {
+	case "on":
+		h.autoAdvance = true
+	case "off":
+		h.autoAdvance = false
+	default:
+		return append(msgs, baps3.NewMessage(baps3.RsWhat).AddArg("Bad argument"))
+	}
+	return append(msgs, h.makeRsAutoAdvance())
 }
 
 var REQ_FUNC_MAP = map[baps3.MessageWord]func(*hub, baps3.Message) []*baps3.Message{
-	baps3.RqEnqueue: (*hub).processReqEnqueue,
-	baps3.RqDequeue: (*hub).processReqDequeue,
-	baps3.RqSelect:  (*hub).processReqSelect,
-	baps3.RqList:    (*hub).processReqList,
-	baps3.RqLoad:    (*hub).processReqLoadEject,
-	baps3.RqEject:   (*hub).processReqLoadEject,
-	baps3.RqDump:    (*hub).processReqDump,
+	baps3.RqEnqueue:     (*hub).processReqEnqueue,
+	baps3.RqDequeue:     (*hub).processReqDequeue,
+	baps3.RqSelect:      (*hub).processReqSelect,
+	baps3.RqList:        (*hub).processReqList,
+	baps3.RqLoad:        (*hub).processReqLoadEject,
+	baps3.RqEject:       (*hub).processReqLoadEject,
+	baps3.RqDump:        (*hub).processReqDump,
+	baps3.RqAutoAdvance: (*hub).processReqAutoadvance,
 }
 
 // Handles a request from a client.
@@ -220,14 +252,6 @@ func (h *hub) processRequest(c *Client, req baps3.Message) {
 	log.Println("New request:", req.String())
 	if reqFunc, ok := REQ_FUNC_MAP[req.Word()]; ok {
 		responses := reqFunc(h, req)
-		// Of course one of them is special...
-		if req.Word() == baps3.RqSelect {
-			if h.pl.HasSelection() {
-				h.cReqCh <- *baps3.NewMessage(baps3.RqLoad).AddArg(h.pl.items[h.pl.selection].Data)
-			} else {
-				h.cReqCh <- *baps3.NewMessage(baps3.RqEject)
-			}
-		}
 		for _, resp := range responses {
 			// TODO: Add a "is fail word" func to baps3-go?
 			if resp.Word() == baps3.RsFail || resp.Word() == baps3.RsWhat {
@@ -242,10 +266,20 @@ func (h *hub) processRequest(c *Client, req baps3.Message) {
 	}
 }
 
+func (h *hub) handleRsEnd(res baps3.Message) {
+	if h.autoAdvance && h.pl.Advance() { // Selection changed
+		h.cReqCh <- *baps3.NewMessage(baps3.RqLoad).AddArg(h.pl.items[h.pl.selection].Data)
+		h.broadcast(*baps3.NewMessage(baps3.RsSelect).AddArg(strconv.Itoa(h.pl.selection)))
+	}
+}
+
 // Processes a response from the downstream service.
 func (h *hub) processResponse(res baps3.Message) {
 	log.Println("New response:", res.String())
 	switch res.Word() {
+	case baps3.RsEnd: // Handle, broadcast and update state
+		h.handleRsEnd(res)
+		fallthrough
 	case baps3.RsTime, baps3.RsState: // Broadcast _AND_ update state
 		h.broadcast(res)
 		fallthrough
