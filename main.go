@@ -50,6 +50,20 @@ func main() {
 	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
 	go connector.Run()
 
+	var h = hub{
+		clients: make(map[*Client]bool),
+
+		downstreamState: *baps3.InitServiceState(),
+
+		pl: InitPlaylist(),
+
+		reqCh: make(chan clientAndMessage),
+
+		addCh: make(chan *Client),
+		rmCh:  make(chan *Client),
+		Quit:  make(chan bool),
+	}
+
 	h.setConnector(connector.ReqCh, responseCh)
 
 	go h.runListener(args["--addr"].(string), args["--port"].(string))
