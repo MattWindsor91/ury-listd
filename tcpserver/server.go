@@ -14,7 +14,7 @@ type Server struct {
 
 	onClientConnectCB    func(c *Client)
 	onClientDisconnectCB func(c *Client, err error)
-	onNewMessageCB       func(c *Client, message string)
+	onNewMessageCB       func(c *Client, message []byte)
 }
 
 func (s *Server) onClientConnect(c *Client) {
@@ -31,7 +31,7 @@ func (s *Server) onClientDisconnect(c *Client, err error) {
 	s.onClientDisconnectCB(c, err)
 }
 
-func (s *Server) onNewMessage(c *Client, message string) {
+func (s *Server) onNewMessage(c *Client, message []byte) {
 	s.onNewMessageCB(c, message)
 }
 
@@ -48,12 +48,12 @@ func (s *Server) SetClientDisconnectFunc(cb func(c *Client, err error)) {
 }
 
 // SetNewMessageFunc sets the user's endpoint func for handling a new message.
-func (s *Server) SetNewMessageFunc(cb func(c *Client, message string)) {
+func (s *Server) SetNewMessageFunc(cb func(c *Client, message []byte)) {
 	s.onNewMessageCB = cb
 }
 
 // Broadcast sends a message to all connected clients.
-func (s *Server) Broadcast(message string) {
+func (s *Server) Broadcast(message []byte) {
 	for client := range s.clients {
 		client.Send(message)
 	}
@@ -111,7 +111,7 @@ func New(hostport string) *Server {
 		clients:              make(map[*Client]bool),
 		onClientConnectCB:    func(c *Client) {},
 		onClientDisconnectCB: func(c *Client, err error) {},
-		onNewMessageCB:       func(c *Client, message string) {},
+		onNewMessageCB:       func(c *Client, message []byte) {},
 	}
 	return s
 }

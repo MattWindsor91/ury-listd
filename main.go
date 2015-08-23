@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/UniversityRadioYork/ury-listd-go/tcpserver"
 	"github.com/docopt/docopt-go"
@@ -42,9 +44,9 @@ func (ctxt *context) onClientDisconnect(c *tcpserver.Client, err error) {
 	ctxt.log.Warn("Client gone: ", c.RemoteAddr(), " because ", err)
 }
 
-func (ctxt *context) onNewMessage(c *tcpserver.Client, message string) {
-	ctxt.log.Info("Msg: ", message)
-	ctxt.server.Broadcast(message + "\n")
+func (ctxt *context) onNewMessage(c *tcpserver.Client, message []byte) {
+	ctxt.log.Info("Msg: ", bytes.TrimRight(message, "\n"))
+	ctxt.server.Broadcast(message)
 }
 
 func main() {
