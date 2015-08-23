@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 VERSION=`git describe --tags --always`
-LDFLAGS="-X main.LD_VERSION $VERSION"
+LDFLAGS="-X main.LDVersion=$VERSION"
 case `basename $0` in
 build)
     go build -ldflags "$LDFLAGS"

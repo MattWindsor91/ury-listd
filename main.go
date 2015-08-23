@@ -1,17 +1,13 @@
 package main
 
 import (
-	"log"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
-
-	baps3 "github.com/UniversityRadioYork/baps3-go"
+	"github.com/Sirupsen/logrus"
+	"github.com/UniversityRadioYork/ury-listd-go/tcpserver"
 	"github.com/docopt/docopt-go"
 )
 
-var LD_VERSION string
+// Version string, provided by linker flags
+var LDVersion string
 
 func parseArgs() (args map[string]interface{}, err error) {
 	usage := `ury-listd-go.
@@ -29,55 +25,55 @@ Options:
   -h --help                     Show this screen.
   -v --version                  Show version.`
 
-	return docopt.Parse(usage, nil, true, "ury-listd-go 0.0", false)
+	return docopt.Parse(usage, nil, true, "ury-listd-go "+LDVersion, false)
+}
+
+// TODO Rename?
+type context struct {
+	log    *logrus.Logger
+	server *tcpserver.Server
+}
+
+func (ctxt *context) onClientConnect(c *tcpserver.Client) {
+	ctxt.log.Info("New client: ", c.RemoteAddr())
+}
+
+func (ctxt *context) onClientDisconnect(c *tcpserver.Client, err error) {
+	ctxt.log.Warn("Client gone: ", c.RemoteAddr(), " because ", err)
+}
+
+func (ctxt *context) onNewMessage(c *tcpserver.Client, message string) {
+	ctxt.log.Info("Msg: ", message)
+	ctxt.server.Broadcast(message + "\n")
 }
 
 func main() {
-	log.SetFlags(log.Lshortfile) // Set up default logger
+	logger := logrus.New()
+	logger.Level = logrus.DebugLevel
+
+	// Get arguments (or their defaults)
 	args, err := parseArgs()
 	if err != nil {
-		log.Fatal("Error parsing args: " + err.Error())
+		logger.Fatal("Error parsing args: " + err.Error())
 	}
 
-	sigs := make(chan os.Signal)
-	signal.Notify(sigs, syscall.SIGINT)
+	hostport := args["--addr"].(string) + ":" + args["--port"].(string)
+	s := tcpserver.New(hostport)
 
-	responseCh := make(chan baps3.Message)
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	connLog := log.New(os.Stderr, "playd:", 0)
-	connector := baps3.InitConnector("", responseCh, wg, connLog)
-	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
-	go connector.Run()
+	// TODO: Make connection to playout system
 
-	var h = hub{
-		clients: make(map[*Client]bool),
-
-		downstreamState: *baps3.InitServiceState(),
-
-		pl: InitPlaylist(),
-
-		reqCh: make(chan clientAndMessage),
-
-		addCh: make(chan *Client),
-		rmCh:  make(chan *Client),
-		Quit:  make(chan bool),
+	c := &context{
+		log:    logger,
+		server: s,
 	}
 
-	h.setConnector(connector.ReqCh, responseCh)
+	s.SetClientConnectFunc(c.onClientConnect)
+	s.SetClientDisconnectFunc(c.onClientDisconnect)
+	s.SetNewMessageFunc(c.onNewMessage)
 
-	go h.runListener(args["--addr"].(string), args["--port"].(string))
-
-	// Signal handler loop
-	for {
-		select {
-		case <-sigs:
-			log.Println("Exiting...")
-			h.Quit <- true
-			//<-h.Quit // Wait for quit to finish
-			close(connector.ReqCh)
-			wg.Wait()
-			os.Exit(0)
-		}
+	logger.Info("Listening on ", hostport)
+	if err := s.Listen(); err != nil {
+		logger.Error(err)
 	}
+
 }
