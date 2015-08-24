@@ -102,9 +102,10 @@ func main() {
 	s.SetNewMessageFunc(c.onNewMessage)
 
 	c.playout, err = NewConnection(cfg.Playout.URI)
+	if err != nil {
+		logger.Fatal("Error connecting to playout: " + err.Error())
+	}
 
 	logger.Info("Listening on ", cfg.Server.Listen)
-	if err := s.Listen(); err != nil {
-		logger.Error(err)
-	}
+	s.Listen()
 }

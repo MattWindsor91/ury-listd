@@ -84,7 +84,7 @@ func (s *Server) listenNewConnections(newConn chan<- net.Conn) {
 }
 
 // Listen for new connections and handle channels
-func (s *Server) Listen() error {
+func (s *Server) Listen() {
 	newCh := make(chan net.Conn)
 	rmCh := make(chan clientError)
 	msgCh := make(chan clientMessage)
@@ -99,9 +99,9 @@ func (s *Server) Listen() error {
 			s.onClientDisconnect(clienterr.c, clienterr.e)
 		case clientmsg := <-msgCh:
 			s.onNewMessage(clientmsg.c, clientmsg.m)
+			// TODO: Stop the world.
 		}
 	}
-	return nil
 }
 
 // New creates a new server instance that listens on hostport.
