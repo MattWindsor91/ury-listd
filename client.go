@@ -1,4 +1,4 @@
-package tcpserver
+package main
 
 import (
 	"bufio"
@@ -35,12 +35,17 @@ func (c *Client) listen(rmCh chan<- clientError, msgCh chan<- clientMessage) {
 	}
 }
 
-// Send writes a message string to the client instance.
+// Send asyncronously writes a message string to the client instance.
 func (c *Client) Send(message []byte) {
-	_, err := c.Write(message)
-	if err != nil {
-		// If error, reasonable to assume client has been removed by listen
-		// gorountine. No need to do anything else.
-		log.Println(err)
-	}
+	// We don't care about any return value (errors handled by listen thread)
+	// so run this in a goroutine to stop slow things (e.g. networks) slowing
+	// the whole program down.
+	go func() {
+		_, err := c.Write(message)
+		if err != nil {
+			// If error, reasonable to assume client has been removed by listen
+			// gorountine. No need to do anything else.
+			log.Println(err)
+		}
+	}()
 }

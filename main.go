@@ -1,39 +1,16 @@
 package main
 
 import (
-	"bytes"
 	"os"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/Sirupsen/logrus"
-	"github.com/UniversityRadioYork/ury-listd-go/tcpserver"
 	"github.com/docopt/docopt-go"
 )
 
 // Version string, provided by linker flags
 var LDVersion string
-
-// TODO Rename?
-type context struct {
-	log      *logrus.Logger
-	server   *tcpserver.Server
-	playout  *Connection
-	playlist *Playlist
-}
-
-func (ctxt *context) onClientConnect(c *tcpserver.Client) {
-	ctxt.log.Info("New client: ", c.RemoteAddr())
-}
-
-func (ctxt *context) onClientDisconnect(c *tcpserver.Client, err error) {
-	ctxt.log.Warn("Client gone: ", c.RemoteAddr(), " because ", err)
-}
-
-func (ctxt *context) onNewMessage(c *tcpserver.Client, message []byte) {
-	ctxt.log.Info("Msg: ", bytes.TrimRight(message, "\n"))
-	ctxt.server.Broadcast(message)
-}
 
 func parseArgs(argv0 string) (args map[string]interface{}, err error) {
 	usage := `{prog}.
@@ -87,25 +64,8 @@ func main() {
 		logger.Level = level
 	}
 
-	// Make TCP Server
-	s := tcpserver.New(cfg.Server.Listen)
+	// Make Context
+	c := NewContext(cfg.Server.Listen, cfg.Playout.URI, logger)
 
-	// TODO: Make connection to playout system
-
-	c := &context{
-		log:    logger,
-		server: s,
-	}
-
-	s.SetClientConnectFunc(c.onClientConnect)
-	s.SetClientDisconnectFunc(c.onClientDisconnect)
-	s.SetNewMessageFunc(c.onNewMessage)
-
-	c.playout, err = NewConnection(cfg.Playout.URI)
-	if err != nil {
-		logger.Fatal("Error connecting to playout: " + err.Error())
-	}
-
-	logger.Info("Listening on ", cfg.Server.Listen)
-	s.Listen()
+	c.Run()
 }
