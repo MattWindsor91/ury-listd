@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/UniversityRadioYork/ury-listd-go/tcp"
 )
 
 // Context is the main listd instance. Manages TCP connections (including the
@@ -12,106 +13,78 @@ import (
 type Context struct {
 	log *logrus.Logger
 	pl  *Playlist
+	s   *tcp.Server
 
 	// TCP Stuffs
-	addr         string
-	clients      map[*Client]bool
 	outgoingAddr string
-	outgoing     *Client
+	outgoing     *tcp.Client
 }
 
-func (ctx *Context) onClientConnect(c *Client) {
-	ctx.log.Info("New client connection", c.RemoteAddr())
+func (ctx *Context) onClientConnect(c *tcp.Client) {
+	ctx.log.Info("New client connection ", c.RemoteAddr())
+	// Logic goes here
 }
 
-func (ctx *Context) onClientDisconnect(c *Client, err error) {
-	clErr := c.Close()
-	if clErr != nil {
+func (ctx *Context) onClientDisconnect(c *tcp.Client, err error) {
+	if rmErr := ctx.s.RemoveClient(c); rmErr != nil {
 		// Err, help?
-		ctx.log.Warn("Error closing connection: ", clErr)
+		ctx.log.Warn("Error closing connection: ", rmErr)
 	}
-	delete(ctx.clients, c)
-	ctx.log.Warn("Connection lost from ", c.RemoteAddr())
+	ctx.log.Warn("Connection lost from ", c.RemoteAddr(), " because ", err)
+	// Logic goes here
 }
 
-func (ctx *Context) onNewRequest(c *Client, message []byte) {
+func (ctx *Context) onNewRequest(c *tcp.Client, message []byte) {
 	ctx.log.Debug("Request: ", string(bytes.TrimRight(message, "\n")))
+	// Logic goes here
 	ctx.outgoing.Send(message)
 }
 
 func (ctx *Context) onNewResponse(message []byte) {
 	ctx.log.Debug("Response: ", string(bytes.TrimRight(message, "\n")))
-	ctx.Broadcast(message)
-}
-
-// Broadcast sends a message to all connected clients.
-func (ctx *Context) Broadcast(message []byte) {
-	for client := range ctx.clients {
-		client.Send(message)
-	}
-}
-
-func (ctx *Context) newClient(conn net.Conn, rmCh chan<- clientError, requestCh chan<- clientMessage) *Client {
-	client := &Client{
-		Conn: conn,
-	}
-	go client.listen(rmCh, requestCh)
-	return client
-}
-
-func (ctx *Context) listenNewConnections(newConn chan<- net.Conn) {
-	listener, err := net.Listen("tcp", ctx.addr)
-	if err != nil {
-		ctx.log.Fatal(err)
-	}
-	ctx.log.Info("Listening on ", ctx.addr)
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			ctx.log.Warn(err)
-		}
-		newConn <- conn
-	}
+	// Logic goes here
+	ctx.s.Broadcast(message)
 }
 
 // Run the main loop (handling channels).
 func (ctx *Context) Run() {
 	newCh := make(chan net.Conn)
-	go ctx.listenNewConnections(newCh)
+	go ctx.s.Listen(newCh)
 
 	// Make connection
-	responseCh := make(chan clientMessage)
-	outgoingRmCh := make(chan clientError)
+	responseCh := make(chan tcp.ClientMessage)
+	outgoingRmCh := make(chan tcp.ClientError)
 	conn, err := net.Dial("tcp", ctx.outgoingAddr)
 	if err != nil {
 		ctx.log.Fatal(err)
 	}
-	ctx.outgoing = ctx.newClient(conn, outgoingRmCh, responseCh)
+	ctx.outgoing = tcp.NewClient(conn, responseCh, outgoingRmCh)
+	go ctx.outgoing.Listen()
 
 	// Main loop
-	requestCh := make(chan clientMessage)
-	rmCh := make(chan clientError)
+	requestCh := make(chan tcp.ClientMessage)
+	rmCh := make(chan tcp.ClientError)
 	for {
 		select {
 		// Client stuff
 		case conn := <-newCh:
-			client := ctx.newClient(conn, rmCh, requestCh)
-			ctx.clients[client] = true
+			client := tcp.NewClient(conn, requestCh, rmCh)
+			ctx.s.AddClient(client)
+			go client.Listen()
 			ctx.onClientConnect(client)
 		case clienterr := <-rmCh:
-			ctx.onClientDisconnect(clienterr.c, clienterr.e)
+			ctx.onClientDisconnect(clienterr.C, clienterr.E)
 		case request := <-requestCh:
-			ctx.onNewRequest(request.c, request.m)
+			ctx.onNewRequest(request.C, request.M)
 
 		// Outgoing stuff
 		case response := <-responseCh:
 			// Don't care about the client, we already know about that
-			ctx.onNewResponse(response.m)
+			ctx.onNewResponse(response.M)
 		case outgoingerr := <-outgoingRmCh:
 			// Connection died :(
 			// TODO: Handle it
-			ctx.log.Fatal(outgoingerr.e)
+			ctx.log.Fatal(outgoingerr.E)
 			// TODO: Stop the world.
 		}
 	}
@@ -121,10 +94,9 @@ func (ctx *Context) Run() {
 // make an outgoing connection on outgoing and make use of logger for logging.
 func NewContext(hostport, outgoing string, logger *logrus.Logger) *Context {
 	c := &Context{
-		addr:         hostport,
 		outgoingAddr: outgoing,
-		clients:      make(map[*Client]bool),
 		log:          logger,
+		s:            tcp.NewServer(hostport, logger),
 	}
 	return c
 }
