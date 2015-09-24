@@ -26,7 +26,7 @@ Options:
   -v --version               Show version.`
 	usage = strings.Replace(usage, "{prog}", argv0, -1)
 
-	return docopt.Parse(usage, nil, true, "ury-listd-go "+LDVersion, false)
+	return docopt.Parse(usage, nil, true, "ury-listd "+LDVersion, false)
 }
 
 func main() {

@@ -2,4 +2,5 @@
 *.sw?
 
 ury-listd-go
+ury-listd
 config.toml

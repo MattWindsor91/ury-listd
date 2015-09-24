@@ -5,7 +5,7 @@ import (
 	"net"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/UniversityRadioYork/ury-listd-go/tcp"
+	"github.com/UniversityRadioYork/ury-listd/tcp"
 )
 
 // Context is the main listd instance. Manages TCP connections (including the
