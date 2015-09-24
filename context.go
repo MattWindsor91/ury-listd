@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"net"
 
 	"github.com/Sirupsen/logrus"
+	msg "github.com/UniversityRadioYork/bifrost-go/message"
 	"github.com/UniversityRadioYork/ury-listd/tcp"
 )
 
@@ -34,14 +34,14 @@ func (ctx *Context) onClientDisconnect(c *tcp.Client, err error) {
 	// Logic goes here
 }
 
-func (ctx *Context) onNewRequest(c *tcp.Client, message []byte) {
-	ctx.log.Debug("Request: ", string(bytes.TrimRight(message, "\n")))
+func (ctx *Context) onNewRequest(c *tcp.Client, message *msg.Message) {
+	ctx.log.Debug("Request: ", message.String())
 	// Logic goes here
 	ctx.outgoing.Send(message)
 }
 
-func (ctx *Context) onNewResponse(message []byte) {
-	ctx.log.Debug("Response: ", string(bytes.TrimRight(message, "\n")))
+func (ctx *Context) onNewResponse(message *msg.Message) {
+	ctx.log.Debug("Response: ", message.String())
 	// Logic goes here
 	ctx.s.Broadcast(message)
 }

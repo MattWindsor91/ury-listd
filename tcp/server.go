@@ -4,6 +4,7 @@ import (
 	"net"
 
 	"github.com/Sirupsen/logrus"
+	msg "github.com/UniversityRadioYork/bifrost-go/message"
 )
 
 type Server struct {
@@ -13,7 +14,7 @@ type Server struct {
 }
 
 // Broadcast sends a message to all connected clients.
-func (s *Server) Broadcast(message []byte) {
+func (s *Server) Broadcast(message *msg.Message) {
 	for client := range s.clients {
 		client.Send(message)
 	}

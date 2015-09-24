@@ -1,15 +1,17 @@
 package tcp
 
 import (
-	"bufio"
 	"log"
 	"net"
+
+	msg "github.com/UniversityRadioYork/bifrost-go/message"
+	"github.com/UniversityRadioYork/bifrost-go/tokeniser"
 )
 
 // Client is a connection to our TCP server.
 type Client struct {
 	net.Conn
-	rw    *bufio.ReadWriter
+	tok   *tokeniser.Tokeniser
 	msgCh chan<- ClientMessage
 	rmCh  chan<- ClientError
 }
@@ -23,7 +25,7 @@ type ClientError struct {
 // ClientMessage is a tuple type for sending client and message down a channel.
 type ClientMessage struct {
 	C *Client
-	M []byte
+	M *msg.Message
 }
 
 // Listen reads new lines from the socket connection. A new message gets sent
@@ -32,9 +34,15 @@ type ClientMessage struct {
 // and returns.
 func (c *Client) Listen() {
 	for {
-		message, err := c.rw.ReadBytes('\n')
+		line, err := c.tok.Tokenise()
 		if err != nil {
 			c.rmCh <- ClientError{c, err} // Remove self
+			return
+		}
+
+		message, err := msg.LineToMessage(line)
+		if err != nil {
+			c.rmCh <- ClientError{c, err}
 			return
 		}
 		c.msgCh <- ClientMessage{c, message}
@@ -42,14 +50,16 @@ func (c *Client) Listen() {
 }
 
 // Send asyncronously writes a message string to the client instance.
-func (c *Client) Send(message []byte) {
-	if _, err := c.rw.Write(message); err != nil {
+func (c *Client) Send(message *msg.Message) {
+	data, err := message.Pack()
+	if err != nil {
+		// ??? was converted from bytes, so should convert back
+		log.Fatal(err)
+	}
+
+	if _, err := c.Write(data); err != nil {
 		// If error, reasonable to assume client has been removed by listen
 		// gorountine. No need to do anything else.
-		log.Println(err)
-	}
-	if err := c.rw.Flush(); err != nil {
-		// Same as above
 		log.Println(err)
 	}
 }
@@ -58,11 +68,9 @@ func (c *Client) Send(message []byte) {
 // a request channel to send new messages down and an removal channel to send
 // errors down when there's an error reading.
 func NewClient(conn net.Conn, requestCh chan<- ClientMessage, rmCh chan<- ClientError) *Client {
-	reader := bufio.NewReader(conn)
-	writer := bufio.NewWriter(conn)
 	client := &Client{
 		Conn:  conn,
-		rw:    bufio.NewReadWriter(reader, writer),
+		tok:   tokeniser.New(conn),
 		msgCh: requestCh,
 		rmCh:  rmCh,
 	}
