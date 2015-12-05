@@ -34,13 +34,13 @@ func (ctx *Context) onClientDisconnect(c *tcp.Client, err error) {
 	// Logic goes here
 }
 
-func (ctx *Context) onNewRequest(c *tcp.Client, message *msg.Message) {
+func (ctx *Context) onNewRequest(c *tcp.Client, message msg.Message) {
 	ctx.log.Debug("Request: ", message.String())
 	// Logic goes here
 	ctx.outgoing.Send(message)
 }
 
-func (ctx *Context) onNewResponse(message *msg.Message) {
+func (ctx *Context) onNewResponse(message msg.Message) {
 	ctx.log.Debug("Response: ", message.String())
 	// Logic goes here
 	ctx.s.Broadcast(message)

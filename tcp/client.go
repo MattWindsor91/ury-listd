@@ -25,7 +25,7 @@ type ClientError struct {
 // ClientMessage is a tuple type for sending client and message down a channel.
 type ClientMessage struct {
 	C *Client
-	M *msg.Message
+	M msg.Message
 }
 
 // Listen reads new lines from the socket connection. A new message gets sent
@@ -40,22 +40,14 @@ func (c *Client) Listen() {
 			return
 		}
 
-		message, err := msg.LineToMessage(line)
-		if err != nil {
-			c.rmCh <- ClientError{c, err}
-			return
-		}
+		message := msg.Message(line)
 		c.msgCh <- ClientMessage{c, message}
 	}
 }
 
 // Send asyncronously writes a message string to the client instance.
-func (c *Client) Send(message *msg.Message) {
-	data, err := message.Pack()
-	if err != nil {
-		// ??? was converted from bytes, so should convert back
-		log.Fatal(err)
-	}
+func (c *Client) Send(message msg.Message) {
+	data := message.Pack()
 
 	if _, err := c.Write(data); err != nil {
 		// If error, reasonable to assume client has been removed by listen

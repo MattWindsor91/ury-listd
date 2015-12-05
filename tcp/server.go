@@ -14,7 +14,7 @@ type Server struct {
 }
 
 // Broadcast sends a message to all connected clients.
-func (s *Server) Broadcast(message *msg.Message) {
+func (s *Server) Broadcast(message msg.Message) {
 	for client := range s.clients {
 		client.Send(message)
 	}
