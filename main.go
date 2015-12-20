@@ -1,83 +1,73 @@
 package main
 
 import (
-	"log"
 	"os"
-	"os/signal"
-	"sync"
-	"syscall"
+	"strings"
 
-	baps3 "github.com/UniversityRadioYork/baps3-go"
+	"github.com/BurntSushi/toml"
+	"github.com/Sirupsen/logrus"
 	"github.com/docopt/docopt-go"
 )
 
-var LD_VERSION string
+// Version string, provided by linker flags
+var LDVersion string
 
-func parseArgs() (args map[string]interface{}, err error) {
-	usage := `ury-listd-go.
+var ProgVersion = "ury-listd " + LDVersion
+
+func parseArgs(argv0 string) (args map[string]interface{}, err error) {
+	usage := `{prog}.
 
 Usage:
-  ury-listd-go [-p <port>] [-a <address>] [-P <port>] [-A <address>]
-  ury-listd-go -h
-  ury-listd-go -v
+  {prog} [-c <configfile>]
+  {prog} -h
+  {prog} -v
 
 Options:
-  -p --port=<port>              The port ury-listd-go listens on [default: 1351].
-  -a --addr=<address>           The host ury-listd-go listens on [default: 127.0.0.1].
-  -P --playoutport=<port>       The playout system's listening port [default: 1350].
-  -A --playoutaddr=<address>    The playout system's listening address [default: 127.0.0.1].
-  -h --help                     Show this screen.
-  -v --version                  Show version.`
+  -c --config=<configfile>   Path to config file [default: config.toml]
+  -h --help                  Show this screen.
+  -v --version               Show version.`
+	usage = strings.Replace(usage, "{prog}", argv0, -1)
 
-	return docopt.Parse(usage, nil, true, "ury-listd-go 0.0", false)
+	return docopt.Parse(usage, nil, true, ProgVersion, false)
 }
 
 func main() {
-	log.SetFlags(log.Lshortfile) // Set up default logger
-	args, err := parseArgs()
+	logger := logrus.New()
+
+	// Get arguments (or their defaults)
+	args, err := parseArgs(os.Args[0])
 	if err != nil {
-		log.Fatal("Error parsing args: " + err.Error())
+		logger.Fatal("Error parsing args: " + err.Error())
 	}
 
-	sigs := make(chan os.Signal)
-	signal.Notify(sigs, syscall.SIGINT)
-
-	responseCh := make(chan baps3.Message)
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	connLog := log.New(os.Stderr, "playd:", 0)
-	connector := baps3.InitConnector("", responseCh, wg, connLog)
-	connector.Connect(args["--playoutaddr"].(string) + ":" + args["--playoutport"].(string))
-	go connector.Run()
-
-	var h = hub{
-		clients: make(map[*Client]bool),
-
-		downstreamState: *baps3.InitServiceState(),
-
-		pl: InitPlaylist(),
-
-		reqCh: make(chan clientAndMessage),
-
-		addCh: make(chan *Client),
-		rmCh:  make(chan *Client),
-		Quit:  make(chan bool),
-	}
-
-	h.setConnector(connector.ReqCh, responseCh)
-
-	go h.runListener(args["--addr"].(string), args["--port"].(string))
-
-	// Signal handler loop
-	for {
-		select {
-		case <-sigs:
-			log.Println("Exiting...")
-			h.Quit <- true
-			//<-h.Quit // Wait for quit to finish
-			close(connector.ReqCh)
-			wg.Wait()
-			os.Exit(0)
+	// Parse config
+	// TODO: Make it its own type?
+	var cfg struct {
+		Server struct {
+			Listen string
+		}
+		Playout struct {
+			URI string
+		}
+		Log struct {
+			Level string
 		}
 	}
+	if _, err := toml.DecodeFile(args["--config"].(string), &cfg); err != nil {
+		logger.Fatal("Error decoding toml config: " + err.Error())
+	}
+
+	// Properly set up logger
+	if cfg.Log.Level != "" {
+		level, err := logrus.ParseLevel(cfg.Log.Level)
+		if err != nil {
+			logger.Fatal("Failed to parse log level: " + err.Error())
+		}
+		logger.Level = level
+	}
+
+	// Make Context
+	c := NewContext(cfg.Server.Listen, cfg.Playout.URI, logger)
+
+	c.Run()
 }
