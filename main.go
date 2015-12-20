@@ -12,6 +12,8 @@ import (
 // Version string, provided by linker flags
 var LDVersion string
 
+var ProgVersion = "ury-listd " + LDVersion
+
 func parseArgs(argv0 string) (args map[string]interface{}, err error) {
 	usage := `{prog}.
 
@@ -26,7 +28,7 @@ Options:
   -v --version               Show version.`
 	usage = strings.Replace(usage, "{prog}", argv0, -1)
 
-	return docopt.Parse(usage, nil, true, "ury-listd "+LDVersion, false)
+	return docopt.Parse(usage, nil, true, ProgVersion, false)
 }
 
 func main() {

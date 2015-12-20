@@ -2,6 +2,8 @@ package main
 
 import (
 	"net"
+	"strconv"
+	"strings"
 
 	"github.com/Sirupsen/logrus"
 	msg "github.com/UniversityRadioYork/bifrost-go/message"
@@ -20,9 +22,15 @@ type Context struct {
 	outgoing     *tcp.Client
 }
 
+func OhaiMsg() msg.Message {
+	return msg.Message{msg.RsOhai, ProgVersion, "bifrost α"}
+}
+
 func (ctx *Context) onClientConnect(c *tcp.Client) {
 	ctx.log.Info("New client connection ", c.RemoteAddr())
+	c.Send(OhaiMsg())
 	// Logic goes here
+	// TODO: Send tree?
 }
 
 func (ctx *Context) onClientDisconnect(c *tcp.Client, err error) {
@@ -34,16 +42,99 @@ func (ctx *Context) onClientDisconnect(c *tcp.Client, err error) {
 	// Logic goes here
 }
 
-func (ctx *Context) onNewRequest(c *tcp.Client, message msg.Message) {
+func splitPath(path string) []string {
+	f := func(c rune) bool {
+		return c == '/'
+	}
+	return strings.FieldsFunc(path, f)
+}
+
+func joinPath(path []string) string {
+	return "/" + strings.Join(path, "/")
+}
+
+func msgLenCheck(cmd msg.Message) bool {
+	l := len(cmd)
+	if l < 1 {
+		return false
+	}
+	switch cmd[0] {
+	case msg.RqRead:
+	case msg.RqDelete:
+		return l == 3
+	case msg.RqWrite:
+		return l == 4
+	case msg.RsRes:
+		return l == 5
+	case msg.RsUpdate:
+		return l == 4
+	case msg.RsAck:
+		// Pfft, who knows.
+		return l > 3
+	}
+	return false
+}
+
+func (ctx *Context) onNewRequest(c *tcp.Client, message msg.Message) msg.Message {
 	ctx.log.Debug("Request: ", message.String())
-	// Logic goes here
+
+	if !msgLenCheck(message) {
+		return msg.Ack(msg.AckWhat, "Bad command or file name", message)
+	}
+
+	tag := message[1]
+	path := splitPath(message[2])
+
+	if len(path) != 3 || path[0] != "playlist" {
+		// If it's not to do with playlists, we don't care about it and can send it on
+		ctx.outgoing.Send(message)
+		return nil
+	}
+
+	idx, err := strconv.Atoi(path[1])
+	if err != nil {
+		return msg.Ack(msg.AckFail, "Index must be numeric", message)
+	}
+
+	//	hash := path[2]
+	switch message[0] {
+	case msg.RqRead:
+		item, err := ctx.pl.Get(idx)
+		if err != nil {
+			return msg.Ack(msg.AckFail, err.Error(), message)
+		}
+		c.Send(msg.Res(tag, joinPath(path), "string", item.Data))
+		return msg.Ack(msg.AckOk, "success", message)
+	case msg.RqWrite:
+	case msg.RqDelete:
+	default:
+		return msg.Ack(msg.AckWhat, "Bad command or file name", message)
+	}
+
+	// Not something we recognise, pass it on for something else to fail.
 	ctx.outgoing.Send(message)
+	return nil
+}
+
+func isOurTag(tag string) bool {
+	return strings.HasPrefix(tag, "listd")
 }
 
 func (ctx *Context) onNewResponse(message msg.Message) {
 	ctx.log.Debug("Response: ", message.String())
-	// Logic goes here
-	ctx.s.Broadcast(message)
+
+	// Invalid or not our response, pass it on.
+	if len(message) < 2 {
+		return
+	} else if (message[0] == msg.RsAck || message[0] == msg.RsRes) && !isOurTag(message[1]) {
+		ctx.s.Broadcast(message)
+	}
+	// logic
+
+	// if update, pass on
+	if message[0] == msg.RsUpdate {
+		ctx.s.Broadcast(message)
+	}
 }
 
 // Run the main loop (handling channels).
@@ -75,7 +166,10 @@ func (ctx *Context) Run() {
 		case clienterr := <-rmCh:
 			ctx.onClientDisconnect(clienterr.C, clienterr.E)
 		case request := <-requestCh:
-			ctx.onNewRequest(request.C, request.M)
+			ackMsg := ctx.onNewRequest(request.C, request.M)
+			if ackMsg != nil {
+				request.C.Send(ackMsg)
+			}
 
 		// Outgoing stuff
 		case response := <-responseCh:

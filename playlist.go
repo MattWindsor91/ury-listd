@@ -31,8 +31,8 @@ func (pl *Playlist) Enqueue(idx int, item *PlaylistItem) (newIdx int, err error)
 		}
 	}
 
-	// appending on the end is necessary
-	if idx, err = pl.resolveIndex(idx, len(pl.items)+1); err != nil {
+	// +1 for the case of appending on the end of list
+	if idx, err = resolveIndex(idx, len(pl.items)+1); err != nil {
 		return
 	}
 	pl.insert(idx, item)
@@ -43,7 +43,7 @@ func (pl *Playlist) Enqueue(idx int, item *PlaylistItem) (newIdx int, err error)
 }
 
 func (pl *Playlist) Dequeue(idx int, hash string) (oldIdx int, oldHash string, err error) {
-	if idx, err = pl.resolveIndex(idx, len(pl.items)); err != nil {
+	if idx, err = resolveIndex(idx, len(pl.items)); err != nil {
 		return
 	}
 	if pl.items[idx].Hash != hash {
@@ -58,7 +58,7 @@ func (pl *Playlist) Dequeue(idx int, hash string) (oldIdx int, oldHash string, e
 
 // TODO: Way of deselecting current selection
 func (pl *Playlist) Select(idx int, hash string) (curIdx int, curHash string, err error) {
-	if idx, err = pl.resolveIndex(idx, len(pl.items)); err != nil {
+	if idx, err = resolveIndex(idx, len(pl.items)); err != nil {
 		return
 	}
 	if pl.items[idx].Hash != hash {
@@ -98,6 +98,14 @@ func (pl *Playlist) Advance() bool {
 	return true
 }
 
+func (pl *Playlist) Get(idx int) (item *PlaylistItem, err error) {
+	if idx, err = resolveIndex(idx, len(pl.items)); err != nil {
+		return
+	}
+	item = pl.items[idx]
+	return
+}
+
 func (pl *Playlist) insert(i int, item *PlaylistItem) {
 	// i must be valid index
 	pl.items = append(pl.items, nil)
@@ -129,7 +137,8 @@ func (pl *Playlist) changeSelection(wasEnqueue bool, index int) {
 	}
 }
 
-func (pl *Playlist) resolveIndex(idx int, length int) (resolved int, err error) {
+// Allows looking up using negative indexes, i.e. -1 is last item in list.
+func resolveIndex(idx int, length int) (resolved int, err error) {
 	resolved = idx
 	if idx < 0 {
 		resolved += length
